@@ -353,9 +353,3 @@ def failed_logins_since(conn: sqlite3.Connection, since: datetime) -> int:
                  (SELECT MAX(attempted_at) FROM login_attempts WHERE succeeded = 1), '')""",
         (to_iso(since),),
     ).fetchone()[0]
-
-
-def last_failed_login(conn: sqlite3.Connection) -> str | None:
-    return conn.execute(
-        "SELECT MAX(attempted_at) FROM login_attempts WHERE succeeded = 0"
-    ).fetchone()[0]
