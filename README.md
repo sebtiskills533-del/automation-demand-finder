@@ -1,4 +1,4 @@
-﻿# Automation Demand Finder
+# Automation Demand Finder
 
 A personal dashboard that finds people online asking for small automations
 ("copy my orders into a sheet", "email me when X happens"), has Claude score
