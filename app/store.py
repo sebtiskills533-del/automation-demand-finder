@@ -289,6 +289,18 @@ def spend_since(conn: sqlite3.Connection, since: datetime) -> float:
     ).fetchone()[0]
 
 
+def usage_totals_since(conn: sqlite3.Connection, since: datetime, task: str) -> dict[str, float]:
+    """Tokens and cost for one task since `since` (used for a run's summary)."""
+    row = conn.execute(
+        """SELECT COALESCE(SUM(input_tokens), 0) AS input_tokens,
+                  COALESCE(SUM(output_tokens), 0) AS output_tokens,
+                  COALESCE(SUM(cost_usd), 0) AS cost_usd
+           FROM llm_usage WHERE created_at >= ? AND task = ?""",
+        (to_iso(since), task),
+    ).fetchone()
+    return dict(row)
+
+
 def usage_by_model_since(conn: sqlite3.Connection, since: datetime) -> list[dict]:
     rows = conn.execute(
         """SELECT model, COUNT(*) AS calls, SUM(input_tokens) AS input_tokens,

@@ -70,25 +70,43 @@ class FakeSource:
         return list(self._posts)
 
 
-def fake_message(parsed, *, stop_reason="end_turn", input_tokens=1000, output_tokens=200):
-    """Shape of an anthropic ParsedMessage, as far as the app reads it."""
+def fake_message(payload, *, stop_reason="end_turn", input_tokens=1000, output_tokens=200):
+    """Shape of an anthropic Message, as far as the app reads it.
+
+    `payload` is a dict (sent as JSON) or a raw string (to test bad output).
+    """
+    text = payload if isinstance(payload, str) else json.dumps(payload)
     return SimpleNamespace(
-        parsed_output=parsed,
+        content=[SimpleNamespace(type="thinking", thinking=""), SimpleNamespace(type="text", text=text)],
         stop_reason=stop_reason,
         usage=SimpleNamespace(input_tokens=input_tokens, output_tokens=output_tokens),
-        _request_id="req_test",
     )
 
 
+def claude_status_error(cls, status: int):
+    """A real anthropic SDK error (e.g. AuthenticationError) with an HTTP status."""
+    import httpx2
+
+    request = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+    return cls("boom", response=httpx2.Response(status, request=request), body=None)
+
+
+def claude_connection_error():
+    import anthropic
+    import httpx2
+
+    return anthropic.APIConnectionError(request=httpx2.Request("POST", "https://api.anthropic.com"))
+
+
 class FakeAnthropic:
-    """Stands in for anthropic.Anthropic: messages.parse returns queued results."""
+    """Stands in for anthropic.Anthropic: messages.create returns queued results."""
 
     def __init__(self, *results):
         self.queue = deque(results)
         self.calls: list[dict] = []
-        self.messages = SimpleNamespace(parse=self._parse)
+        self.messages = SimpleNamespace(create=self._create)
 
-    def _parse(self, **kwargs):
+    def _create(self, **kwargs):
         self.calls.append(kwargs)
         if not self.queue:
             raise AssertionError("Unexpected Claude call")
