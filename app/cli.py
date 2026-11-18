@@ -70,6 +70,10 @@ def open_runtime(need_llm: bool = False) -> Iterator[Runtime]:
         except AppError as exc:
             log.exception("Run stopped")
             _fail(exc)
+        except Exception:
+            # A bug, not a known problem: keep the traceback in logs/app.log.
+            log.exception("Unexpected error")
+            raise
 
 
 def _fail(exc: AppError) -> NoReturn:

@@ -101,6 +101,26 @@ def test_hackernews_parses_hits():
     assert params["numericFilters"] == f"created_at_i>{int(now.timestamp()) - 24 * 3600}"
 
 
+def test_hackernews_malformed_hit_is_skipped_not_fatal():
+    http, _ = http_with(
+        hn_response(
+            [
+                {"objectID": "1", "title": "Ok", "created_at_i": 10**20},  # timestamp overflow
+                None,  # not even a dict
+                {"objectID": "2", "title": "Fine post", "created_at_i": 1763460000},
+            ]
+        )
+    )
+    posts = HackerNewsSource("automate").fetch(http)
+    assert [p.id for p in posts] == ["hn_2"]
+
+
+def test_hackernews_hits_not_a_list_raises():
+    http, _ = http_with(FakeResponse(200, {"hits": "nope"}))
+    with pytest.raises(SourceFetchError):
+        HackerNewsSource("automate").fetch(http)
+
+
 def test_hackernews_bad_json_raises():
     http, _ = http_with(FakeResponse(200, b"not json"))
     with pytest.raises(SourceFetchError):

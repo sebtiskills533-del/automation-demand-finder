@@ -10,7 +10,7 @@ from app.domain import Post
 from app.errors import SourceFetchError
 from app.html_text import html_to_text
 from app.http_client import PoliteHttpClient
-from app.sources.base import clean_text
+from app.sources.base import clean_text, convert_entries
 
 log = logging.getLogger(__name__)
 
@@ -51,12 +51,9 @@ class HackerNewsSource:
         except (ValueError, KeyError, TypeError) as exc:
             raise SourceFetchError(f"{self.name}: unexpected response from Hacker News") from exc
 
-        posts: list[Post] = []
-        for hit in hits:
-            post = self._to_post(hit)
-            if post is not None:
-                posts.append(post)
-        return posts
+        if not isinstance(hits, list):
+            raise SourceFetchError(f"{self.name}: unexpected response from Hacker News")
+        return convert_entries(self.name, hits, self._to_post)
 
     def _to_post(self, hit: dict) -> Post | None:
         object_id = str(hit.get("objectID", ""))
@@ -76,6 +73,6 @@ class HackerNewsSource:
             url=ITEM_URL.format(object_id),
             title=clean_text(hit["title"]),
             body=clean_text(html_to_text(hit.get("story_text") or "")),
-            author_handle=str(hit.get("author") or "")[:50],
+            author_handle=clean_text(str(hit.get("author") or ""))[:50],
             posted_at=posted_at,
         )

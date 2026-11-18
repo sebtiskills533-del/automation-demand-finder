@@ -14,7 +14,7 @@ from app.domain import Post
 from app.errors import SourceFetchError
 from app.html_text import html_to_text
 from app.http_client import PoliteHttpClient
-from app.sources.base import clean_text
+from app.sources.base import clean_text, convert_entries
 
 log = logging.getLogger(__name__)
 
@@ -40,12 +40,7 @@ class RedditSource:
         if feed.bozo and not feed.entries:
             raise SourceFetchError(f"{self.name}: the feed could not be read")
 
-        posts: list[Post] = []
-        for entry in feed.entries:
-            post = self._to_post(entry)
-            if post is not None:
-                posts.append(post)
-        return posts
+        return convert_entries(self.name, feed.entries, self._to_post)
 
     def _to_post(self, entry: feedparser.FeedParserDict) -> Post | None:
         id_match = _POST_ID_RE.match(entry.get("id", ""))
@@ -69,7 +64,7 @@ class RedditSource:
             url=link,
             title=clean_text(entry.get("title", "")),
             body=clean_text(html_to_text(html)),
-            author_handle=author[:50],
+            author_handle=clean_text(author)[:50],
             posted_at=posted_at,
         )
 
