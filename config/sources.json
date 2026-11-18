@@ -1,0 +1,11 @@
+{
+  "reddit": {
+    "subreddits": ["smallbusiness", "automation", "googlesheets", "Etsy", "excel", "zapier"],
+    "posts_per_feed": 25
+  },
+  "hackernews": {
+    "queries": ["automate", "automation"],
+    "lookback_hours": 48,
+    "hits_per_query": 50
+  }
+}

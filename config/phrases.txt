@@ -1,0 +1,28 @@
+# Request phrases for the keyword pre-filter.
+# A post passes if its title or text contains at least one of these.
+# One phrase per line, not case-sensitive. Lines starting with # are ignored.
+automate
+automated
+automating
+automation
+is there a way to
+is there any way to
+every day i
+every week i
+manually
+copy and paste
+copy paste
+spreadsheet
+google sheets
+zapier
+make.com
+n8n
+apps script
+script
+workflow
+save time
+repetitive
+tedious
+looking for a tool
+hire someone
+will pay

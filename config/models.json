@@ -1,0 +1,44 @@
+{
+  "_note": "Prices are USD per 1 million tokens (Anthropic list prices, checked 2026-11-18). Edit this file when prices change or a new model comes out; no code changes needed.",
+  "models": [
+    {
+      "id": "claude-haiku-5-5",
+      "name": "Claude Haiku 5.5",
+      "level": 1,
+      "level_label": "Basic - fastest and cheapest",
+      "input_usd_per_mtok": 0.10,
+      "output_usd_per_mtok": 0.50,
+      "description": "Best for the daily analysis of many posts."
+    },
+    {
+      "id": "claude-sonnet-5-5",
+      "name": "Claude Sonnet 5.5",
+      "level": 2,
+      "level_label": "Balanced",
+      "input_usd_per_mtok": 2.00,
+      "output_usd_per_mtok": 10.00,
+      "description": "Better judgement and writing; about 20x the cost of Haiku."
+    },
+    {
+      "id": "claude-opus-5-5",
+      "name": "Claude Opus 5.5",
+      "level": 3,
+      "level_label": "Advanced",
+      "input_usd_per_mtok": 4.00,
+      "output_usd_per_mtok": 20.00,
+      "description": "Deep reasoning; use for a few important items only."
+    },
+    {
+      "id": "claude-fable-5-2",
+      "name": "Claude Fable 5.2",
+      "level": 4,
+      "level_label": "Most capable",
+      "input_usd_per_mtok": 8.00,
+      "output_usd_per_mtok": 40.00,
+      "description": "Anthropic's most capable model; the most expensive."
+    }
+  ],
+  "task_defaults": {
+    "analyze": "claude-haiku-5-5"
+  }
+}
