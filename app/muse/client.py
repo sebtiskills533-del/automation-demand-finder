@@ -18,6 +18,7 @@ QUIET_SECONDS = 60
 REPLY_TIMEOUT_SECONDS = 30 * 60
 POLL_SECONDS = 1.0
 PAGE_LOAD_SECONDS = 30
+CHAT_LIST_SECONDS = 10
 
 
 @dataclass(frozen=True)
@@ -108,13 +109,19 @@ def open_chat(page, chat_name: str, root=None) -> None:
         )
 
     chat = root.get_by_role("button", name=selectors.chat_button_name(chat_name or selectors.MAIN_CHAT)).first
+    chats = root.get_by_role("button", name=selectors.CHATS_BUTTON).first
     # In a wide window the chat list is already open; otherwise open it via "Chats".
+    # Either can appear a moment after the message box (about 1 s in the extension
+    # panel, seen 2026-11-19), so wait for whichever shows up first.
     opened_panel = False
-    if not _visible(chat):
-        chats = root.get_by_role("button", name=selectors.CHATS_BUTTON).first
+    for _ in range(CHAT_LIST_SECONDS):
+        if _visible(chat):
+            break
         if _visible(chats):
             chats.click()
             opened_panel = True
+            break
+        page.wait_for_timeout(1000)
     try:
         chat.wait_for(state="visible", timeout=15_000)
     except Exception as exc:  # Playwright TimeoutError

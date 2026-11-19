@@ -281,7 +281,8 @@ class FakePage:
     url = "https://muse.ai/chat/abc"
 
     def __init__(self, visible, reply="POSTS START", log_text="earlier messages\n", duplicates=(),
-                 behind_chats_button=(), extension="installed"):
+                 behind_chats_button=(), extension="installed", appear_after_wait=()):
+        self.appear_after_wait = set(appear_after_wait)
         self.visible, self.reply, self.log_text = set(visible), reply, log_text
         self.duplicates = set(duplicates)
         self.behind_chats_button = set(behind_chats_button)
@@ -314,7 +315,8 @@ class FakePage:
         return FakeLocator(self, "log", "log")
 
     def wait_for_timeout(self, ms):
-        pass
+        # Elements that only appear after a short wait (like the real "Chats" button).
+        self.visible |= self.appear_after_wait
 
     def close(self):
         self.closed = True
@@ -360,6 +362,14 @@ def test_ask_muse_drives_the_chat_inside_the_extension_panel():
     assert page.visited == [f"chrome-extension://{EXT_ID}/panel/index.html"]
     assert page.clicks[:2] == [CHATS, CHAT] and page.typed == "FIND POSTS."
     assert result.chat_url == "https://muse.ai/chat/abc"  # the muse.ai frame, not the extension URL
+
+
+def test_chats_button_that_appears_late_is_still_used():
+    # Regression (third live run): in the extension panel "Chats" shows up ~1 s after
+    # the message box; checking only once made the app report the chat as missing.
+    page = FakePage({COMPOSER}, appear_after_wait={CHATS}, behind_chats_button={CHAT})
+    ask_muse(FakeContext(page), "AUTOMATION DEMAND FINDER", "FIND POSTS.", extension_id=EXT_ID, wait=no_wait)
+    assert page.clicks[:2] == [CHATS, CHAT]
 
 
 def test_extension_not_installed():
