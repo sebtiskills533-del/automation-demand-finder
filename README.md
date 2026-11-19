@@ -60,8 +60,9 @@ Then choose a dashboard password (it's stored only as a secure hash). Typing is 
 | Dashboard | `.venv\Scripts\python -m streamlit run app/dashboard.py` |
 | Tests | `.venv\Scripts\python -m pytest` |
 
-**Desktop shortcut:** run this once and you get an *Automation Demand Finder* icon on your
-desktop that starts the dashboard and opens your browser:
+**Desktop shortcut:** run this once and you get two desktop icons: *Automation Demand Finder*
+(starts the dashboard and opens your browser) and *Automation Demand Finder -
+Daily job* (collects and rates new posts right now):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\create_desktop_shortcut.ps1
