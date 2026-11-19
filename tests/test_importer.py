@@ -141,6 +141,22 @@ def test_import_reports_bad_rows_and_keeps_good_ones(conn):
     assert "1 skipped" in report.summary
 
 
+def test_paste_accepts_a_copied_muse_answer(conn):
+    pasted = (
+        "Here is what I found:\nPOSTS START\nurl,title,text,source,author,posted_at\n"
+        'https://www.facebook.com/groups/1/posts/9,Need a sheet automation,"Will pay",Facebook,Ann,2026-11-18\n'
+        "POSTS END\nWant me to look for more?"
+    )
+    report = import_text(conn, pasted, now=lambda: NOW)
+    assert report.added == 1
+    assert conn.execute("SELECT platform FROM posts").fetchone()[0] == "facebook"
+
+
+def test_paste_of_a_muse_problem_line_explains_itself(conn):
+    with pytest.raises(ValueError, match="no posts in the expected format"):
+        import_text(conn, "POSTS START\nnothing useful here\nPOSTS END", now=lambda: NOW)
+
+
 def test_import_text_size_limit(conn, monkeypatch):
     monkeypatch.setattr(importer, "MAX_IMPORT_BYTES", 10)
     with pytest.raises(ValueError, match="too much"):

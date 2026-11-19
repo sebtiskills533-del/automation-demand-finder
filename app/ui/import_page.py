@@ -46,7 +46,7 @@ def render(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry
 
     with st.container(border=True):
         st.markdown("#### ➕ Add posts yourself")
-        one, upload, paste = st.tabs(["Add one post", "Upload a file", "Paste CSV / JSON"])
+        one, upload, paste = st.tabs(["Add one post", "Upload a file", "Paste (CSV, JSON or Muse answer)"])
         with one:
             _single_post_form(conn)
         with upload:
@@ -86,7 +86,7 @@ def _upload(conn: sqlite3.Connection) -> None:
 def _paste(conn: sqlite3.Connection) -> None:
     with st.form("paste", clear_on_submit=False):
         text = st.text_area(
-            "Paste CSV (with header line) or JSON", height=200, max_chars=2_000_000,
+            "Paste CSV (with header line), JSON, or Muse's whole answer (POSTS START ... POSTS END)", height=200, max_chars=2_000_000,
             placeholder=TEMPLATE_CSV + "https://www.facebook.com/groups/x/posts/1,Need my orders in a sheet,...",
         )
         submitted = st.form_submit_button("Import")
@@ -176,8 +176,9 @@ def _muse_section(conn: sqlite3.Connection, settings: Settings) -> None:
     if r1.button("🔄 Refresh"):
         st.rerun()
     if r2.button("📥 Import Muse's last reply", disabled=running,
-                 help="Muse finished after the app stopped waiting? This reads its last reply from the chat "
-                      "and imports the posts, without sending a new job. Safe to repeat."):
+                 help="Reads Muse's newest post list from the AUTOMATION DEMAND FINDER chat and imports it, "
+                      "without sending a new job. Use it after you asked Muse yourself in that chat, or if "
+                      "Muse finished after the app stopped waiting. Safe to repeat."):
         try:
             start_background_import_last()
             st.success("Reading Muse's last reply. Click 'Refresh' in about 30 seconds.")
@@ -223,7 +224,7 @@ def _agent_help() -> None:
     with st.expander("Using an AI browser assistant (such as Muse) to prepare the CSV"):
         st.write(
             "Open the posts in your browser yourself, then give your assistant this instruction. "
-            "Paste its answer into the 'Paste CSV / JSON' tab."
+            "Paste its whole answer into the 'Paste (CSV, JSON or Muse answer)' tab."
         )
         st.code(AGENT_PROMPT, language=None)
         st.warning(

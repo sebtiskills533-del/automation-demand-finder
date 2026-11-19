@@ -9,8 +9,10 @@ from dataclasses import dataclass
 
 from app.errors import MuseBrowserError, MuseChatNotFoundError, MuseLoggedOutError, MuseTimeoutError
 from app.muse import selectors
+from app.muse.parse import POSTS_START_RE
 
 log = logging.getLogger(__name__)
+
 
 # Muse is an agent: it works in steps and can browse silently for minutes
 # (run 5, 2026-11-19: over 60 s of silence while it searched Facebook). So a
@@ -187,23 +189,37 @@ def ask_muse(
 def read_latest_reply(
     context, chat_name: str, job_prefix: str, *, extension_id: str | None = None
 ) -> MuseReplyText:
-    """Muse's reply to the most recent job in the chat, without sending anything.
-    Used to recover a reply that finished after a run stopped reading."""
+    """Muse's newest post list in the chat, without sending anything.
+
+    Used to recover a reply that finished after a run stopped reading, and to
+    import searches the user asked for by hand in the same chat.
+    """
     page = context.new_page()
     try:
         root = open_surface(page, extension_id)
         open_chat(page, chat_name, root)
         page.wait_for_timeout(2000)  # let the chat history render
-        text = _log_reader(root)()
-        start = text.rfind(job_prefix)
-        if start == -1:
-            return MuseReplyText(text="", chat_url=_chat_url(page, root))
-        # Skip the job line itself; the reply starts on the next line.
-        newline = text.find("\n", start)
-        reply = text[newline + 1:] if newline != -1 else ""
-        return MuseReplyText(text=reply.strip(), chat_url=_chat_url(page, root))
+        reply = latest_reply_in(_log_reader(root)(), job_prefix)
+        return MuseReplyText(text=reply, chat_url=_chat_url(page, root))
     finally:
         page.close()
+
+
+def latest_reply_in(chat_text: str, job_prefix: str) -> str:
+    """The newest reply worth importing from a whole chat log.
+
+    Muse's newest POSTS START block wins (it may answer a request the user typed
+    by hand); otherwise the text after the most recent app job line, so a
+    NO POSTS FOUND / PROBLEM answer to that job is still reported.
+    """
+    job = chat_text.rfind(job_prefix)
+    posts = max((m.start() for m in POSTS_START_RE.finditer(chat_text)), default=-1)
+    if posts > job:
+        return chat_text[posts:].strip()
+    if job == -1:
+        return ""
+    newline = chat_text.find("\n", job)  # skip the job line itself
+    return chat_text[newline + 1:].strip() if newline != -1 else ""
 
 
 def _log_reader(root) -> Callable[[], str]:

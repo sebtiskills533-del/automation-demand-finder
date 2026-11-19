@@ -23,6 +23,7 @@ from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
 from app import store
+from app.errors import AppError
 from app.domain import MAX_BODY_CHARS, MAX_TITLE_CHARS, PLATFORM_NAMES, Post, platform_for_host, utc_now
 from app.privacy import strip_contact_details
 
@@ -123,10 +124,20 @@ def import_rows(
 
 
 def import_text(conn: sqlite3.Connection, text: str, now: Callable[[], datetime] = utc_now) -> ImportReport:
-    """Parse pasted/uploaded CSV or JSON and import it."""
+    """Parse pasted/uploaded CSV, JSON, or a copied Muse answer (POSTS START ... POSTS END)."""
     if len(text.encode("utf-8")) > MAX_IMPORT_BYTES:
         raise ValueError(f"That's too much at once (limit {MAX_IMPORT_BYTES // 1_000_000} MB).")
-    return import_rows(conn, parse_import(text), now)
+    # Imported here, not at the top: app.muse.parse itself builds on this module.
+    from app.muse.parse import POSTS_START_RE, parse_muse_reply
+
+    if POSTS_START_RE.search(text):
+        try:
+            rows = parse_muse_reply(text, MAX_IMPORT_ROWS).rows
+        except AppError as exc:
+            raise ValueError(str(exc)) from None
+    else:
+        rows = parse_import(text)
+    return import_rows(conn, rows, now)
 
 
 def decode_upload(data: bytes) -> str:

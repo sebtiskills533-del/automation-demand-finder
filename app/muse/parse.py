@@ -18,7 +18,8 @@ from dataclasses import dataclass, field
 from app.errors import MuseReplyError
 from app.importer import parse_import
 
-_START = re.compile(r"^\W*POSTS\s+START\W*$", re.IGNORECASE)
+# MULTILINE so it also finds the marker inside a whole chat log (client.latest_reply_in).
+POSTS_START_RE = re.compile(r"^\W*POSTS\s+START\W*$", re.IGNORECASE | re.MULTILINE)
 _END = re.compile(r"^\W*POSTS\s+END\W*$", re.IGNORECASE)
 _HEADER = re.compile(r"^\s*url\s*,\s*title\b", re.IGNORECASE)
 _ROW = re.compile(r'^\s*"?https://', re.IGNORECASE)
@@ -70,7 +71,7 @@ def parse_muse_reply(text: str, max_posts: int) -> MuseReply:
 
 
 def _between_markers(lines: list[str]) -> list[str]:
-    start = next((i for i, ln in enumerate(lines) if _START.match(ln)), None)
+    start = next((i for i, ln in enumerate(lines) if POSTS_START_RE.match(ln)), None)
     if start is None:
         return []
     end = next((i for i in range(start + 1, len(lines)) if _END.match(lines[i])), len(lines))

@@ -644,6 +644,18 @@ def test_read_latest_reply_returns_text_after_the_last_job():
     assert empty.text == ""
 
 
+def test_latest_reply_prefers_a_post_list_the_user_asked_for_by_hand():
+    from app.muse.client import latest_reply_in
+
+    chat = ("FIND POSTS. Focus: x.\nNO POSTS FOUND: quiet week\n"
+            "Can you look in Etsy seller groups too?\nSure!\nPOSTS START\nurl,title\nhttps://x.com/a,T\nPOSTS END")
+    assert latest_reply_in(chat, "FIND POSTS.").startswith("POSTS START")
+    # The newest app job wins when nothing came after it.
+    chat2 = "POSTS START\nold\nPOSTS END\nFIND POSTS. Focus: y.\nNO POSTS FOUND: nothing"
+    assert latest_reply_in(chat2, "FIND POSTS.") == "NO POSTS FOUND: nothing"
+    assert latest_reply_in("hello", "FIND POSTS.") == ""
+
+
 def test_cli_open_chrome_and_run(monkeypatch, settings, capsys):
     from app import cli
     from app.muse import __main__ as muse_cli
