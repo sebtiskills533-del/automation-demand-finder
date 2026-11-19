@@ -74,18 +74,20 @@ def draft_email(
     if not reply["email"]:
         raise ValueError("This person didn't share an email in their reply.")
     check_budget(conn, settings)
+    style = style or get_style(conn)
 
     user_text = (
         f"Their name: {reply['author'] or 'unknown'}\n"
         f"<their_reply>\n{reply['text']}\n</their_reply>\n" + _post_context(conn, reply["post_id"])
     )
     draft = llm.structured_with_retry(
-        task=TASK, model=registry.model_for_task(conn, TASK), system=system_prompt(style or get_style(conn)),
+        task=TASK, model=registry.model_for_task(conn, TASK), system=system_prompt(style),
         user_text=user_text, output_type=EmailDraft,
     ).data
     subject = strip_contact_details(draft.subject)
     body = strip_contact_details(draft.body)
-    store.save_email_draft(conn, reply_id, subject, body)
+    store.save_draft(conn, "email", str(reply_id), style, body, subject)  # kept per style
+    store.save_email_draft(conn, reply_id, subject, body)                  # newest = chosen
     return {"subject": subject, "body": body}
 
 

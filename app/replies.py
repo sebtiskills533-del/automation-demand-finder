@@ -66,6 +66,7 @@ def draft_reply(
     if post is None:
         raise ValueError(f"No analysed post with id {post_id!r}")
     check_budget(conn, settings)
+    style = style or get_style(conn)
 
     user_text = (
         build_user_text(post["platform"], post["source"], post["title"], post["body"])
@@ -76,10 +77,11 @@ def draft_reply(
     result = llm.structured_with_retry(
         task=TASK,
         model=registry.model_for_task(conn, TASK),
-        system=system_prompt(style or get_style(conn)),
+        system=system_prompt(style),
         user_text=user_text,
         output_type=ReplyDraft,
     )
     reply = strip_contact_details(result.data.reply)  # belt and braces
-    store.update_action(conn, post_id, reply_draft=reply)
+    store.save_draft(conn, "reply", post_id, style, reply)      # kept per style, to compare
+    store.update_action(conn, post_id, reply_draft=reply)       # the newest becomes the chosen one
     return reply

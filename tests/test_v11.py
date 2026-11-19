@@ -47,7 +47,7 @@ def test_every_task_has_a_default_model(registry, conn):
 def test_schema_v3_tables_exist(conn):
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"decision_reports", "clusters", "product_specs"} <= tables
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == len(db.MIGRATIONS) == 4
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == len(db.MIGRATIONS) == 5
 
 
 # --------------------------------------------------------------- replies
@@ -90,6 +90,20 @@ def test_draft_reply_unknown_post_and_budget(conn, settings, registry):
     with pytest.raises(BudgetExceededError):
         draft_reply(conn, llm, registry, settings, "reddit_1")
     assert fake.calls == []
+
+
+def test_drafts_are_kept_per_style(conn, settings, registry):
+    seed(conn)
+    llm, _ = llm_with(conn, fake_message({"reply": "Tip first version."}),
+                      fake_message({"reply": "Convincing version."}))
+    draft_reply(conn, llm, registry, settings, "reddit_1", style="tip_first")
+    draft_reply(conn, llm, registry, settings, "reddit_1", style="convincing")
+    drafts = store.get_drafts(conn, "reply", "reddit_1")
+    assert drafts["tip_first"]["body"] == "Tip first version."
+    assert drafts["convincing"]["body"] == "Convincing version."
+    assert store.get_post_details(conn, "reddit_1")["reply_draft"] == "Convincing version."  # newest chosen
+    with pytest.raises(ValueError):
+        store.save_draft(conn, "tweet", "reddit_1", "x", "body")
 
 
 def test_reply_draft_length_is_limited_in_store(conn):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 import sqlite3
@@ -39,8 +40,8 @@ from app.ui.components import (
     md_escape,
     page_header,
     verdict_badge,
-    writing_style_picker,
 )
+from app.ui.draft_compare import compare_drafts
 from app.ui.reply_widgets import reply_card
 from app.ui.table import build_table, stars
 
@@ -225,20 +226,20 @@ def _overview(post: dict) -> None:
 
 def _reply_tab(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry, post: dict) -> None:
     model = registry.model_for_task(conn, "reply")
-    st.caption(f"Claude writes a short, helpful reply. You edit it and post it yourself — nothing is "
-               f"ever posted for you. Uses {model.name}.")
-    style = writing_style_picker(conn, f"reply_{post['id']}")
-    has_draft = bool(post["reply_draft"])
-    if st.button("✨ Write a new draft" if has_draft else "✨ Draft a reply with Claude",
-                 type="secondary" if has_draft else "primary", key=f"draft_{post['id']}"):
-        if _run_ai(lambda: draft_reply(conn, build_llm(settings, conn), registry, settings, post["id"], style),
-                   "Claude is writing a reply..."):
-            st.rerun()
-    if not has_draft:
+    st.caption(f"Claude writes the reply in two styles so you can compare and pick one. You edit it and "
+               f"post it yourself — nothing is ever posted for you. Uses {model.name}.")
+    compare_drafts(
+        conn, kind="reply", owner_id=post["id"], chosen_body=post["reply_draft"], key=f"reply_{post['id']}",
+        make_draft=lambda style: draft_reply(conn, build_llm(settings, conn), registry, settings, post["id"], style),
+        choose=lambda draft: store.update_action(conn, post["id"], reply_draft=draft["body"]),
+    )
+    if not post["reply_draft"]:
         return
 
-    edited = st.text_area("Your reply (edit freely)", post["reply_draft"], height=170,
-                          max_chars=MAX_REPLY_CHARS, key=f"reply_{post['id']}")
+    st.markdown("**✏️ Your chosen reply** (edit freely, then copy)")
+    # The key follows the chosen text, so choosing another draft refreshes this box.
+    edited = st.text_area("Your reply (edit freely)", post["reply_draft"], height=170, label_visibility="collapsed",
+                          max_chars=MAX_REPLY_CHARS, key=f"reply_{post['id']}_{_short_hash(post['reply_draft'])}")
     c1, c2 = st.columns([1, 3])
     if c1.button("💾 Save edits", key=f"save_reply_{post['id']}") and edited != post["reply_draft"]:
         store.update_action(conn, post["id"], reply_draft=edited)
@@ -315,6 +316,10 @@ def _answers_tab(conn: sqlite3.Connection, settings: Settings, registry: ModelRe
         return
     for reply in replies:
         reply_card(conn, settings, registry, reply)
+
+
+def _short_hash(text: str) -> str:
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:8]
 
 
 def _run_ai(action, spinner: str) -> bool:

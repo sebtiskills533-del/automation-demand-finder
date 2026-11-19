@@ -574,6 +574,33 @@ def save_email_draft(conn: sqlite3.Connection, reply_id: int, subject: str, body
                      (subject, body, int(reply_id)))
 
 
+DRAFT_KINDS = ("reply", "email")
+
+
+def save_draft(conn: sqlite3.Connection, kind: str, owner_id: str, style: str, body: str, subject: str = "") -> None:
+    """Keep one draft per writing style, so the user can compare and choose."""
+    if kind not in DRAFT_KINDS:
+        raise ValueError(f"Unknown draft kind {kind!r}")
+    if len(body) > MAX_REPLY_CHARS or len(subject) > 200:
+        raise ValueError("The draft is too long")
+    with transaction(conn):
+        conn.execute(
+            """INSERT INTO drafts (kind, owner_id, style, subject, body, created_at) VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT (kind, owner_id, style) DO UPDATE SET subject = excluded.subject,
+                   body = excluded.body, created_at = excluded.created_at""",
+            (kind, str(owner_id), style, subject, body, to_iso(utc_now())),
+        )
+
+
+def get_drafts(conn: sqlite3.Connection, kind: str, owner_id: str) -> dict[str, dict]:
+    """{style: {"subject", "body", "created_at"}} for one post's replies or one reply's emails."""
+    rows = conn.execute(
+        "SELECT style, subject, body, created_at FROM drafts WHERE kind = ? AND owner_id = ?",
+        (kind, str(owner_id)),
+    ).fetchall()
+    return {r["style"]: {"subject": r["subject"], "body": r["body"], "created_at": r["created_at"]} for r in rows}
+
+
 def post_urls(conn: sqlite3.Connection) -> list[tuple[str, str]]:
     """(id, url) of every post, for linking replies to the post they answer."""
     return [(r[0], r[1]) for r in conn.execute("SELECT id, url FROM posts")]

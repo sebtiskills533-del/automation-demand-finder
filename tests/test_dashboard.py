@@ -164,22 +164,30 @@ def test_reply_tab_drafts_with_claude_and_saves_edits(env, monkeypatch):
     from tests.fakes import FakeAnthropic, fake_message
 
     seed(env)
-    reply = {"reply": "Use an onFormSubmit trigger to append the row. Happy to help if you get stuck."}
+    # One answer per Claude call: the earlier style is drafted first, the preferred one last.
+    answers = iter([{"reply": "Short tip: use an onFormSubmit trigger. Happy to help."},
+                    {"reply": "Copying form answers by hand is slow. An onFormSubmit trigger fixes it."}])
 
     def fake_llm(settings, conn):
         sink = lambda t, m, i, o, c: store.log_usage(conn, t, m, i, o, c)  # noqa: E731
-        return ClaudeClient("key", sink, client=FakeAnthropic(fake_message(reply)))
+        return ClaudeClient("key", sink, client=FakeAnthropic(fake_message(next(answers))))
 
     monkeypatch.setattr(opportunities, "build_llm", fake_llm)
     at = login()
-    at = _click(at, "✨ Draft a reply with Claude")
+    at = _click(at, "✨ Draft both styles")
     assert not at.exception
-    box = at.text_area(key="reply_reddit_0")
-    assert box.value.startswith("Use an onFormSubmit trigger")
-    box.input("My own edited reply.")
+    shown = [c.value for c in at.code]
+    assert any(v.startswith("Short tip") for v in shown) and any(v.startswith("Copying form") for v in shown)
+    box = _by_label(at.text_area, "Your reply")
+    assert box.value.startswith("Copying form")  # the preferred (default) style is chosen
+
+    at = _click(at, "✅ Use this one")  # switch to the other draft
+    assert _by_label(at.text_area, "Your reply").value.startswith("Short tip")
+    _by_label(at.text_area, "Your reply").input("My own edited reply.")
     at = _click(at, "💾 Save edits")
     with db.open_db(env) as conn:
         assert store.get_post_details(conn, "reddit_0")["reply_draft"] == "My own edited reply."
+        assert set(store.get_drafts(conn, "reply", "reddit_0")) == {"tip_first", "convincing"}
 
 
 def test_report_tab_asks_to_tick_first_then_shows_report(env, monkeypatch):
@@ -210,7 +218,7 @@ def test_report_tab_asks_to_tick_first_then_shows_report(env, monkeypatch):
 def test_ai_errors_are_shown_not_crashed(env):
     seed(env)
     at = login()  # no ANTHROPIC_API_KEY in the test environment
-    at = _click(at, "✨ Draft a reply with Claude")
+    at = _click(at, "✨ Draft both styles")
     assert not at.exception
     assert any("ANTHROPIC_API_KEY" in e.value for e in at.error)
 
@@ -425,11 +433,13 @@ def test_writing_style_switch_on_settings_page_is_saved(env):
     assert at.segmented_control(key="style_settings_tip_first").value == "tip_first"
 
 
-def test_reply_tab_shows_the_style_switch(env):
+def test_reply_tab_shows_both_styles_side_by_side(env):
     seed(env)
     at = login()
     assert not at.exception
-    assert at.segmented_control(key="style_reply_reddit_0_convincing").value == "convincing"
+    text = all_text(at)
+    assert "**💡 Short tip first**" in text and "**✨ Clear & convincing**" in text
+    assert sum(b.label == "✨ Draft this style" for b in at.button) == 2
 
 
 # ---------------------------------------------------------------- replies
@@ -480,9 +490,12 @@ def test_replies_page_drafts_email_and_offers_mailto(env, monkeypatch):
 
     monkeypatch.setattr(reply_widgets, "build_llm", fake_llm)
     at = AppTest.from_function(_replies_page_app, default_timeout=TIMEOUT).run()
-    at = _click(at, "✨ Draft an email with Claude")
+    at = _click(at, "✨ Draft both styles")
     assert not at.exception
     assert _by_label(at.text_input, "Subject").value == EMAIL["subject"]
+    with db.open_db(env) as conn:
+        reply_id = store.list_replies(conn)[0]["id"]
+        assert set(store.get_drafts(conn, "email", str(reply_id))) == {"tip_first", "convincing"}
     mail = next(b for b in at.get("link_button") if b.label.startswith("📧 Open in my email app"))
     assert mail.proto.url.startswith("mailto:sara@example.com?subject=")
 

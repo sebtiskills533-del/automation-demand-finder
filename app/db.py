@@ -157,8 +157,22 @@ CREATE INDEX idx_replies_post ON replies (post_id);
 CREATE INDEX idx_replies_unseen ON replies (seen, received_at DESC);
 """
 
+_SCHEMA_V5 = """
+CREATE TABLE drafts (
+    kind       TEXT NOT NULL CHECK (kind IN ('reply', 'email')),
+    owner_id   TEXT NOT NULL,
+    style      TEXT NOT NULL,
+    subject    TEXT NOT NULL DEFAULT '',
+    body       TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (kind, owner_id, style)
+);
+"""
+
 # replies.email holds an address ONLY when the person wrote it in their reply to the user.
-MIGRATIONS: tuple[str, ...] = (_SCHEMA_V1, _SCHEMA_V2, _SCHEMA_V3, _SCHEMA_V4)
+# drafts keeps one draft per writing style (reply: owner = post id; email: owner = reply id);
+# the chosen one is copied to actions.reply_draft / replies.email_subject+email_body.
+MIGRATIONS: tuple[str, ...] = (_SCHEMA_V1, _SCHEMA_V2, _SCHEMA_V3, _SCHEMA_V4, _SCHEMA_V5)
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
