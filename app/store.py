@@ -296,6 +296,12 @@ def get_post_details(conn: sqlite3.Connection, post_id: str) -> dict | None:
     return dict(row) if row else None
 
 
+def get_post_basic(conn: sqlite3.Connection, post_id: str) -> dict | None:
+    """Title and text of any post, rated or not."""
+    row = conn.execute("SELECT id, title, body, url, source FROM posts WHERE id = ?", (post_id,)).fetchone()
+    return dict(row) if row else None
+
+
 def dashboard_counts(conn: sqlite3.Connection, best_score: int, since: datetime) -> dict[str, int]:
     """Numbers for the summary row at the top of the dashboard."""
     row = conn.execute(
@@ -502,6 +508,75 @@ def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
             "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
             (key, value),
         )
+
+
+# --------------------------------------------------------------- replies
+
+
+def save_reply(conn: sqlite3.Connection, reply: dict) -> bool:
+    """Save one reply someone sent the user. False if it was already saved.
+    `reply` keys: reply_key, post_id, platform, url, author, text, email, replied_at."""
+    with transaction(conn):
+        cursor = conn.execute(
+            """INSERT OR IGNORE INTO replies
+               (reply_key, post_id, platform, url, author, text, email, replied_at, received_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (reply["reply_key"], reply["post_id"], reply["platform"], reply["url"], reply["author"],
+             reply["text"], reply["email"], reply["replied_at"], to_iso(utc_now())),
+        )
+    return cursor.rowcount == 1
+
+
+def list_replies(
+    conn: sqlite3.Connection, *, post_id: str | None = None, unseen_only: bool = False, limit: int = 200
+) -> list[dict]:
+    """Replies, newest first, with the title of the post they answer (if known)."""
+    clauses, params = [], []
+    if post_id is not None:
+        clauses.append("r.post_id = ?")
+        params.append(post_id)
+    if unseen_only:
+        clauses.append("r.seen = 0")
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    rows = conn.execute(
+        """SELECT r.*, p.title AS post_title FROM replies r
+           LEFT JOIN posts p ON p.id = r.post_id""" + where
+        + " ORDER BY r.received_at DESC, r.id DESC LIMIT ?",
+        (*params, limit),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_reply(conn: sqlite3.Connection, reply_id: int) -> dict | None:
+    row = conn.execute(
+        "SELECT r.*, p.title AS post_title, p.id AS linked_post FROM replies r "
+        "LEFT JOIN posts p ON p.id = r.post_id WHERE r.id = ?", (reply_id,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def unseen_reply_count(conn: sqlite3.Connection, post_id: str | None = None) -> int:
+    if post_id is None:
+        return conn.execute("SELECT COUNT(*) FROM replies WHERE seen = 0").fetchone()[0]
+    return conn.execute("SELECT COUNT(*) FROM replies WHERE seen = 0 AND post_id = ?", (post_id,)).fetchone()[0]
+
+
+def mark_replies_seen(conn: sqlite3.Connection, reply_ids: Iterable[int]) -> None:
+    with transaction(conn):
+        conn.executemany("UPDATE replies SET seen = 1 WHERE id = ?", [(int(i),) for i in reply_ids])
+
+
+def save_email_draft(conn: sqlite3.Connection, reply_id: int, subject: str, body: str) -> None:
+    if len(subject) > 200 or len(body) > MAX_REPLY_CHARS:
+        raise ValueError("The email is too long")
+    with transaction(conn):
+        conn.execute("UPDATE replies SET email_subject = ?, email_body = ? WHERE id = ?",
+                     (subject, body, int(reply_id)))
+
+
+def post_urls(conn: sqlite3.Connection) -> list[tuple[str, str]]:
+    """(id, url) of every post, for linking replies to the post they answer."""
+    return [(r[0], r[1]) for r in conn.execute("SELECT id, url FROM posts")]
 
 
 # ------------------------------------------------------------ muse runs

@@ -137,7 +137,28 @@ CREATE TABLE product_specs (
 );
 """
 
-MIGRATIONS: tuple[str, ...] = (_SCHEMA_V1, _SCHEMA_V2, _SCHEMA_V3)
+_SCHEMA_V4 = """
+CREATE TABLE replies (
+    id            INTEGER PRIMARY KEY,
+    reply_key     TEXT NOT NULL UNIQUE,
+    post_id       TEXT REFERENCES posts (id) ON DELETE SET NULL,
+    platform      TEXT NOT NULL,
+    url           TEXT NOT NULL,
+    author        TEXT NOT NULL DEFAULT '',
+    text          TEXT NOT NULL,
+    email         TEXT,
+    replied_at    TEXT,
+    received_at   TEXT NOT NULL,
+    seen          INTEGER NOT NULL DEFAULT 0 CHECK (seen IN (0, 1)),
+    email_subject TEXT NOT NULL DEFAULT '',
+    email_body    TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX idx_replies_post ON replies (post_id);
+CREATE INDEX idx_replies_unseen ON replies (seen, received_at DESC);
+"""
+
+# replies.email holds an address ONLY when the person wrote it in their reply to the user.
+MIGRATIONS: tuple[str, ...] = (_SCHEMA_V1, _SCHEMA_V2, _SCHEMA_V3, _SCHEMA_V4)
 
 
 def connect(db_path: Path) -> sqlite3.Connection:

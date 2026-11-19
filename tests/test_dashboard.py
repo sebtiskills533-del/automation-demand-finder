@@ -387,10 +387,10 @@ def test_import_last_reply_button_starts_background_import(env, monkeypatch):
 
 
 def test_start_background_run_uses_argument_list(monkeypatch):
-    from app.ui import import_page
+    from app.ui import background, import_page
 
     calls = []
-    monkeypatch.setattr(import_page.subprocess, "Popen", lambda args, **kw: calls.append((args, kw)))
+    monkeypatch.setattr(background.subprocess, "Popen", lambda args, **kw: calls.append((args, kw)))
     import_page.start_background_run('Etsy"; rm -rf /')
     args, options = calls[0]
     assert args[1:4] == ["-m", "app.muse", "run"]
@@ -412,3 +412,95 @@ def test_settings_page_lists_all_models_and_saves_choice(env):
     assert not at.exception
     with db.open_db(env) as conn:
         assert store.get_setting(conn, "model.analyze") == "claude-sonnet-5-5"
+
+
+# ---------------------------------------------------------------- replies
+
+FB_REPLY_URL = "https://www.facebook.com/groups/1/posts/2/?comment_id=3"
+
+
+def _replies_page_app():
+    from app import db
+    from app.config import load_settings
+    from app.models_registry import load_registry
+    from app.ui import replies_page
+
+    settings = load_settings()
+    with db.open_db(settings.db_path) as conn:
+        replies_page.render(conn, settings, load_registry(settings.models_file))
+
+
+def test_replies_page_empty_then_manual_reply_with_email(env):
+    at = AppTest.from_function(_replies_page_app, default_timeout=TIMEOUT).run()
+    assert not at.exception and "No replies yet" in all_text(at)
+    _by_label(at.text_input, "Link to the conversation").input(FB_REPLY_URL)
+    _by_label(at.text_input, "Their name").input("Sara")
+    _by_label(at.text_area, "Their reply").input("Yes please, email me: sara@example.com")
+    at = _click(at, "Add reply")
+    assert not at.exception
+    assert any("1 new replies" in s.value for s in at.success)
+    at = AppTest.from_function(_replies_page_app, default_timeout=TIMEOUT).run()
+    assert any(c.value == "sara@example.com" for c in at.code)  # shown, copyable
+    assert any(b.label.startswith("Open the conversation") for b in at.get("link_button"))
+    with db.open_db(env) as conn:
+        assert store.unseen_reply_count(conn) == 0  # opening it marked it read
+
+
+def test_replies_page_drafts_email_and_offers_mailto(env, monkeypatch):
+    from app.inbox import add_manual_reply
+    from app.llm import ClaudeClient
+    from app.ui import reply_widgets
+    from tests.fakes import FakeAnthropic, fake_message
+    from tests.test_inbox import EMAIL
+
+    with db.open_db(env) as conn:
+        add_manual_reply(conn, FB_REPLY_URL, "Sara", "Interested! sara@example.com")
+
+    def fake_llm(settings, conn):
+        sink = lambda t, m, i, o, c: store.log_usage(conn, t, m, i, o, c)  # noqa: E731
+        return ClaudeClient("key", sink, client=FakeAnthropic(fake_message(EMAIL)))
+
+    monkeypatch.setattr(reply_widgets, "build_llm", fake_llm)
+    at = AppTest.from_function(_replies_page_app, default_timeout=TIMEOUT).run()
+    at = _click(at, "✨ Draft an email with Claude")
+    assert not at.exception
+    assert _by_label(at.text_input, "Subject").value == EMAIL["subject"]
+    mail = next(b for b in at.get("link_button") if b.label.startswith("📧 Open in my email app"))
+    assert mail.proto.url.startswith("mailto:sara@example.com?subject=")
+
+
+def test_reply_without_email_suggests_answering_on_the_platform(env):
+    from app.inbox import add_manual_reply
+
+    with db.open_db(env) as conn:
+        add_manual_reply(conn, FB_REPLY_URL, "Tom", "Thanks, that worked")
+    at = AppTest.from_function(_replies_page_app, default_timeout=TIMEOUT).run()
+    assert "didn't share an email" in all_text(at)
+    assert not any("Draft an email" in b.label for b in at.button)
+
+
+def test_replies_page_starts_muse_check_in_background(env, monkeypatch):
+    from app.ui import replies_page
+
+    monkeypatch.setenv("MUSE_ENABLED", "true")
+    started = []
+    monkeypatch.setattr(replies_page, "start_muse_process", lambda args: started.append(args))
+    at = AppTest.from_function(_replies_page_app, default_timeout=TIMEOUT).run()
+    at = _click(at, "🔍 Check for replies with Muse")
+    assert not at.exception and started == [["check-replies", "--days", "14"]]
+
+
+def test_new_replies_pop_up_and_show_on_the_post(env):
+    from app.inbox import add_manual_reply
+    from app.importer import import_rows
+
+    with db.open_db(env) as conn:
+        import_rows(conn, [{"url": "https://www.facebook.com/groups/1/?multi_permalinks=2", "title": "Need a bot"}])
+        post_id = conn.execute("SELECT id FROM posts").fetchone()[0]
+        store.save_analysis(conn, make_analysis(post_id, opportunity_score=90))
+        add_manual_reply(conn, FB_REPLY_URL, "Sara", "I'm interested")
+    at = login()
+    assert not at.exception
+    assert any("1 new reply" in t.value for t in at.toast)
+    assert any(t.label == "💬 Replies (1 new)" for t in at.tabs)
+    assert "I'm interested" in all_text(at)

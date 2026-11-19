@@ -21,6 +21,7 @@ TASKS = {
     "report": "Decision reports",
     "cluster": "Grouping into top problems",
     "spec": "Product specs",
+    "email": "Email drafts",
 }
 
 _SETTING_PREFIX = "model."

@@ -40,6 +40,7 @@ from app.ui.components import (
     page_header,
     verdict_badge,
 )
+from app.ui.reply_widgets import reply_card
 from app.ui.table import build_table, stars
 
 log = logging.getLogger(__name__)
@@ -177,8 +178,10 @@ def _details(conn: sqlite3.Connection, settings: Settings, registry: ModelRegist
         _badges(post)
         st.link_button(f"Open the original post on {PLATFORM_NAMES[post['platform']]} ↗", post["url"])
 
-        overview, reply, report, track = st.tabs(
-            ["📄 Overview", "✍️ Reply", "📋 Decision report", "🗂️ Track"], key=f"tabs_{post_id}"
+        new_replies = store.unseen_reply_count(conn, post_id)
+        replies_label = f"💬 Replies ({new_replies} new)" if new_replies else "💬 Replies"
+        overview, reply, report, track, answers = st.tabs(
+            ["📄 Overview", "✍️ Reply", "📋 Decision report", "🗂️ Track", replies_label], key=f"tabs_{post_id}"
         )
         with overview:
             _overview(post)
@@ -188,6 +191,8 @@ def _details(conn: sqlite3.Connection, settings: Settings, registry: ModelRegist
             _report_tab(conn, settings, registry, post)
         with track:
             _track_tab(conn, post)
+        with answers:
+            _answers_tab(conn, settings, registry, post_id)
 
 
 def _badges(post: dict) -> None:
@@ -299,6 +304,15 @@ def _track_tab(conn: sqlite3.Connection, post: dict) -> None:
     if st.button("💾 Save notes", key=f"save_notes_{post['id']}") and notes != post["notes"]:
         store.update_action(conn, post["id"], notes=notes)
         st.toast("Notes saved", icon="✅")
+
+
+def _answers_tab(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry, post_id: str) -> None:
+    replies = store.list_replies(conn, post_id=post_id)
+    if not replies:
+        st.info("No replies to this post yet. Check for replies on the 🔔 Replies page.")
+        return
+    for reply in replies:
+        reply_card(conn, settings, registry, reply)
 
 
 def _run_ai(action, spinner: str) -> bool:

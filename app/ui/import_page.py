@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-import subprocess
-import sys
 from datetime import timedelta
 
 import streamlit as st
@@ -13,7 +11,7 @@ import streamlit as st
 from app import store
 from app.analyze import analyze_pending
 from app.cli import build_llm
-from app.config import PROJECT_ROOT, Settings
+from app.config import Settings
 from app.errors import AppError
 from app.importer import TEMPLATE_CSV, ImportReport, decode_upload, import_rows, import_text
 from app.models_registry import ModelRegistry
@@ -21,6 +19,7 @@ from app.ui.components import page_header
 from app.domain import utc_now
 from app.muse.browser import STALE_LOCK_SECONDS, open_for_setup
 from app.muse.job import MAX_FOCUS_CHARS, clean_focus
+from app.ui.background import start_muse_process
 
 log = logging.getLogger(__name__)
 
@@ -204,20 +203,11 @@ def _muse_section(conn: sqlite3.Connection, settings: Settings) -> None:
 
 def start_background_run(focus: str) -> None:
     """Run `python -m app.muse run` as its own process so the dashboard stays responsive."""
-    _start_muse_process(["run", "--focus", focus] if focus else ["run"])
+    start_muse_process(["run", "--focus", focus] if focus else ["run"])
 
 
 def start_background_import_last() -> None:
-    _start_muse_process(["import-last"])
-
-
-def _start_muse_process(muse_args: list[str]) -> None:
-    # An argument list, never a shell, so nothing typed can be run as a command.
-    args = [sys.executable, "-m", "app.muse", *muse_args]
-    options: dict = {"cwd": PROJECT_ROOT, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
-    if sys.platform == "win32":
-        options["creationflags"] = subprocess.CREATE_NO_WINDOW
-    subprocess.Popen(args, **options)  # noqa: S603
+    start_muse_process(["import-last"])
 
 
 def _agent_help() -> None:

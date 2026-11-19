@@ -9,7 +9,10 @@ password-protected Streamlit dashboard on the user's own computer.
 - Only public posts, via RSS feeds or official APIs. Respect rate limits
   (2 s minimum between requests) and send a clear User-Agent.
 - Never store emails or phone numbers: run text through
-  `app.privacy.strip_contact_details` before saving.
+  `app.privacy.strip_contact_details` before saving. The ONE exception:
+  `replies.email`, an address a person wrote in their own reply to the user
+  (`app.inbox`, via `privacy.extract_email` on that reply only). Never look up,
+  scrape or guess emails anywhere else; phone numbers are never kept.
 - Nothing is ever posted or sent automatically. Every AI output is a draft.
 - Muse (app/muse/) is the one exception to "official APIs only": the user chose it,
   knowing the terms-of-service risk. Keep it opt-in (MUSE_ENABLED), started only
@@ -52,11 +55,13 @@ app/
   reports.py          v1.1 Decision Reports (ticked posts only; app rules win)
   clusters.py         v1.1 top problems (numbered lines in, numbers out)
   specs.py            v1.2 product specs per problem group
+  inbox.py            replies people sent the user (linking, email-if-shared rule)
+  emails.py           email drafts for replies with a shared email (mailto, never sends)
   auth.py             password hashing + login lockout
   set_password.py     CLI to set the dashboard password
   dashboard.py        Streamlit entry point
-  ui/                 dashboard pages (opportunities, problems_page, import_page,
-                      settings_page), components.py (badges, md_escape), assets/
+  ui/                 dashboard pages (opportunities, replies_page, problems_page,
+                      import_page, settings_page), reply_widgets.py, background.py, components.py (badges, md_escape), assets/
                       Theme: .streamlit/config.toml (teal + amber).
 config/               sources.json, phrases.txt, models.json (user-editable)
 run_daily.py          the daily run

@@ -21,12 +21,12 @@ from app.codeguard import code_fingerprint, refresh_if_code_changed  # noqa: E40
 # After an update, re-import every app module instead of mixing old and new code.
 refresh_if_code_changed(_PROJECT_ROOT / "app")
 
-from app import config, db  # noqa: E402
+from app import config, db, store  # noqa: E402
 from app.config import Settings, load_settings  # noqa: E402
 from app.errors import AppError  # noqa: E402
 from app.logging_setup import setup_logging  # noqa: E402
 from app.models_registry import ModelRegistry, load_registry  # noqa: E402
-from app.ui import import_page, opportunities, problems_page, settings_page  # noqa: E402
+from app.ui import import_page, opportunities, problems_page, replies_page, settings_page  # noqa: E402
 from app.ui.components import apply_page_style  # noqa: E402
 from app.ui.login import logout_button, require_login  # noqa: E402
 
@@ -52,6 +52,13 @@ def _load_config(version: tuple[float, float, float]) -> tuple[Settings, ModelRe
     return settings, load_registry(settings.models_file)
 
 
+def _notify_new_replies(count: int) -> None:
+    """A pop-up when new replies arrived since the last one we announced."""
+    if count and st.session_state.get("announced_replies") != count:
+        st.toast(f"🔔 You have {count} new {'reply' if count == 1 else 'replies'}. See the Replies page.")
+    st.session_state["announced_replies"] = count
+
+
 def main() -> None:
     st.set_page_config(page_title="Automation Demand Finder", page_icon="🔎", layout="wide")
     apply_page_style()
@@ -66,9 +73,14 @@ def main() -> None:
             st.stop()
         assets = Path(__file__).parent / "ui" / "assets"
         st.logo(str(assets / "logo.svg"), icon_image=str(assets / "icon.svg"), size="large")
+        new_replies = store.unseen_reply_count(conn)
+        _notify_new_replies(new_replies)
         pages = [
             st.Page(lambda: opportunities.render(conn, settings, registry),
                     title="Opportunities", icon="🎯", url_path="opportunities", default=True),
+            st.Page(lambda: replies_page.render(conn, settings, registry),
+                    title=f"Replies ({new_replies} new)" if new_replies else "Replies",
+                    icon="🔔", url_path="replies"),
             st.Page(lambda: problems_page.render(conn, settings, registry),
                     title="Top problems", icon="🧩", url_path="problems"),
             st.Page(lambda: import_page.render(conn, settings, registry),

@@ -46,6 +46,27 @@ def strip_contact_details(text: str) -> str:
     return "".join(pieces)
 
 
+MAX_EMAIL_CHARS = 254
+_STRICT_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$")
+
+
+def extract_email(text: str) -> str | None:
+    """The first email address written in `text`, or None.
+
+    Used ONLY on a reply someone sent to the user, where they chose to share
+    their address. Never used to look for emails anywhere else.
+    """
+    match = _EMAIL_RE.search(text or "")
+    if not match:
+        return None
+    email = match.group(0).strip(".").lower()
+    return email if is_valid_email(email) else None
+
+
+def is_valid_email(email: str) -> bool:
+    return len(email) <= MAX_EMAIL_CHARS and bool(_STRICT_EMAIL_RE.match(email))
+
+
 def _strip_phones(segment: str) -> str:
     return _PHONE_CANDIDATE_RE.sub(
         lambda m: PHONE_PLACEHOLDER if _looks_like_phone(m.group(0)) else m.group(0), segment

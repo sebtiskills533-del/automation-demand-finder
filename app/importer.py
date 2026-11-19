@@ -91,14 +91,14 @@ def row_to_post(row: Mapping[str, object], now: datetime) -> Post:
     platform = platform_for_host(parsed.hostname)
     source = strip_contact_details(_text(row.get("source")))[:60] or f"Imported: {PLATFORM_NAMES[platform]}"
     return Post(
-        id=_post_id(parsed),
+        id=post_id_for(parsed),
         source=source,
         platform=platform,
         url=urlunparse(parsed._replace(fragment="")),
         title=title,
         body=strip_contact_details(body)[:MAX_BODY_CHARS],
         author_handle=strip_contact_details(_text(row.get("author")))[:50],
-        posted_at=_parse_date(_text(row.get("posted_at")), now),
+        posted_at=parse_date(_text(row.get("posted_at")), now),
     )
 
 
@@ -154,18 +154,23 @@ def _text(value: object) -> str:
     return "" if value is None else str(value).strip()
 
 
-def _post_id(parsed) -> str:
-    """Same link (ignoring www., letter case of the host and #fragment) -> same id."""
+def link_key(parsed) -> str:
+    """A normalised link: the same post gives the same key (ignoring www., the
+    letter case of the host, a trailing slash and the #fragment)."""
     host = parsed.hostname.lower().removeprefix("www.")
     path = parsed.path.rstrip("/")
     if host.endswith("quora.com"):
         # Quora shows one question at /Question and at /unanswered/Question.
         path = path.removeprefix("/unanswered")
-    key = f"{host}{path}?{parsed.query}"
-    return "import_" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+    return f"{host}{path}?{parsed.query}"
 
 
-def _parse_date(raw: str, now: datetime) -> datetime:
+def post_id_for(parsed) -> str:
+    """The id of an imported post (stable, so the same link is never imported twice)."""
+    return "import_" + hashlib.sha256(link_key(parsed).encode("utf-8")).hexdigest()[:16]
+
+
+def parse_date(raw: str, now: datetime) -> datetime:
     if not raw:
         return now
     try:

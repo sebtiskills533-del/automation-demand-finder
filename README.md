@@ -108,6 +108,19 @@ Logs from every run are in `logs/app.log`.
 Colours: 🟢 *Work on this* (score 70+), 🟠 *Worth a look* (45+), ⚪ *Skip*.
 Nothing is ever posted for you: copy a draft and post it yourself.
 
+## Replies to your posts (🔔 Replies)
+
+When people answer your comments on Facebook, Instagram or Quora:
+
+1. **🔔 Replies → 🔍 Check for replies with Muse** (Muse reads your notifications,
+   read-only), or add a reply by hand / paste Muse's `REPLIES START … REPLIES END` list.
+2. New replies show as **Replies (N new)** in the menu, a pop-up when you log in,
+   and in the **💬 Replies** tab of the post they answer.
+3. **Emails:** kept **only** when the person wrote their email in that reply to you.
+   The app never looks for emails anywhere else, and phone numbers are always removed.
+4. For a reply with an email: **✨ Draft an email with Claude**, edit it, then
+   **📧 Open in my email app** — you press Send yourself; the app never sends email.
+
 ## 4. Settings you can change
 
 | File | What it controls |

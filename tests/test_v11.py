@@ -39,7 +39,7 @@ def seed(conn, post_id="reddit_1", status=None, **analysis):
 
 
 def test_every_task_has_a_default_model(registry, conn):
-    assert set(TASKS) == {"analyze", "reply", "report", "cluster", "spec"}
+    assert set(TASKS) == {"analyze", "reply", "report", "cluster", "spec", "email"}
     assert registry.model_for_task(conn, "reply").id == "claude-sonnet-5-5"
     assert registry.model_for_task(conn, "cluster").id == "claude-haiku-5-5"
 
@@ -47,7 +47,7 @@ def test_every_task_has_a_default_model(registry, conn):
 def test_schema_v3_tables_exist(conn):
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"decision_reports", "clusters", "product_specs"} <= tables
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == len(db.MIGRATIONS) == 3
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == len(db.MIGRATIONS) == 4
 
 
 # --------------------------------------------------------------- replies

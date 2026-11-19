@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -187,9 +188,10 @@ def ask_muse(
 
 
 def read_latest_reply(
-    context, chat_name: str, job_prefix: str, *, extension_id: str | None = None
+    context, chat_name: str, job_prefix: str, *, start: re.Pattern[str] = POSTS_START_RE,
+    extension_id: str | None = None,
 ) -> MuseReplyText:
-    """Muse's newest post list in the chat, without sending anything.
+    """Muse's newest list (posts, or replies with `start`) in the chat, without sending anything.
 
     Used to recover a reply that finished after a run stopped reading, and to
     import searches the user asked for by hand in the same chat.
@@ -199,23 +201,23 @@ def read_latest_reply(
         root = open_surface(page, extension_id)
         open_chat(page, chat_name, root)
         page.wait_for_timeout(2000)  # let the chat history render
-        reply = latest_reply_in(_log_reader(root)(), job_prefix)
+        reply = latest_reply_in(_log_reader(root)(), job_prefix, start)
         return MuseReplyText(text=reply, chat_url=_chat_url(page, root))
     finally:
         page.close()
 
 
-def latest_reply_in(chat_text: str, job_prefix: str) -> str:
+def latest_reply_in(chat_text: str, job_prefix: str, start: re.Pattern[str] = POSTS_START_RE) -> str:
     """The newest reply worth importing from a whole chat log.
 
-    Muse's newest POSTS START block wins (it may answer a request the user typed
-    by hand); otherwise the text after the most recent app job line, so a
-    NO POSTS FOUND / PROBLEM answer to that job is still reported.
+    Muse's newest list block (`start` marker) wins (it may answer a request the
+    user typed by hand); otherwise the text after the most recent app job line,
+    so a NO ... FOUND / PROBLEM answer to that job is still reported.
     """
     job = chat_text.rfind(job_prefix)
-    posts = max((m.start() for m in POSTS_START_RE.finditer(chat_text)), default=-1)
-    if posts > job:
-        return chat_text[posts:].strip()
+    block = max((m.start() for m in start.finditer(chat_text)), default=-1)
+    if block > job:
+        return chat_text[block:].strip()
     if job == -1:
         return ""
     newline = chat_text.find("\n", job)  # skip the job line itself

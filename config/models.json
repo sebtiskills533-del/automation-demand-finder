@@ -43,6 +43,7 @@
     "reply": "claude-sonnet-5-5",
     "report": "claude-sonnet-5-5",
     "cluster": "claude-haiku-5-5",
-    "spec": "claude-sonnet-5-5"
+    "spec": "claude-sonnet-5-5",
+    "email": "claude-sonnet-5-5"
   }
 }
