@@ -83,7 +83,7 @@ def run_muse_collection(
     if ask is None:
         def ask(text: str) -> MuseReplyText:
             with connected_context(muse) as context:
-                return ask_muse(context, muse.chat_name, text)
+                return ask_muse(context, muse.chat_name, text, extension_id=muse.extension_id)
 
     try:
         with BrowserLock(settings.db_path.parent / "muse.lock"):

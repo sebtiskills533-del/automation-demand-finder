@@ -59,13 +59,38 @@ def extract_reply(before: str, now: str, message: str) -> str:
     return (added if own == -1 else added[own + len(message):]).strip()
 
 
-def open_chat(page, chat_name: str) -> None:
-    """Go to muse.ai and open the named side chat (or 'Main chat')."""
-    page.goto(f"{selectors.BASE_URL}/", wait_until="domcontentloaded")
+def open_surface(page, extension_id: str | None):
+    """Load Muse and return what holds its chat: the page itself (muse.ai tab), or
+    the muse.ai frame inside the extension panel (which may use the device browser)."""
+    if not extension_id:
+        page.goto(f"{selectors.BASE_URL}/", wait_until="domcontentloaded")
+        return page
+    try:
+        page.goto(selectors.extension_panel_url(extension_id), wait_until="domcontentloaded")
+    except Exception as exc:  # net::ERR_BLOCKED_BY_CLIENT etc. when it isn't installed
+        raise MuseBrowserError(
+            "The 'Muse from Meta' Chrome extension is not installed (or is switched off) in the "
+            "app's Chrome. Open the Muse Chrome and add it from the Chrome Web Store."
+        ) from exc
+    for _ in range(PAGE_LOAD_SECONDS):
+        frame = next((f for f in page.frames if f.url.startswith(selectors.BASE_URL)), None)
+        if frame is not None:
+            return frame
+        page.wait_for_timeout(1000)
+    raise MuseBrowserError("The Muse extension panel did not load. Look at the Muse Chrome window.")
+
+
+def open_chat(page, chat_name: str, root=None) -> None:
+    """Open the named side chat (or 'Main chat') in an already loaded Muse surface.
+
+    `root` is where the chat lives (the page, or the extension's muse.ai frame);
+    `page` is the tab, used for waiting and the keyboard.
+    """
+    root = page if root is None else root
     # .first everywhere: muse.ai shows the same button more than once (the logged-out
     # page has two "Log in" buttons), and Playwright refuses ambiguous checks.
-    composer = page.get_by_role("textbox", name=selectors.COMPOSER_LABEL).first
-    login = page.get_by_role("button", name=selectors.LOGIN_BUTTON, exact=True).first
+    composer = root.get_by_role("textbox", name=selectors.COMPOSER_LABEL).first
+    login = root.get_by_role("button", name=selectors.LOGIN_BUTTON, exact=True).first
 
     # Whichever appears first: the message box (logged in) or "Log in" (logged out).
     for _ in range(PAGE_LOAD_SECONDS):
@@ -82,11 +107,11 @@ def open_chat(page, chat_name: str) -> None:
             "and look at the Muse Chrome window."
         )
 
-    chat = page.get_by_role("button", name=selectors.chat_button_name(chat_name or selectors.MAIN_CHAT)).first
+    chat = root.get_by_role("button", name=selectors.chat_button_name(chat_name or selectors.MAIN_CHAT)).first
     # In a wide window the chat list is already open; otherwise open it via "Chats".
     opened_panel = False
     if not _visible(chat):
-        chats = page.get_by_role("button", name=selectors.CHATS_BUTTON).first
+        chats = root.get_by_role("button", name=selectors.CHATS_BUTTON).first
         if _visible(chats):
             chats.click()
             opened_panel = True
@@ -110,14 +135,20 @@ def ask_muse(
     chat_name: str,
     message: str,
     *,
+    extension_id: str | None = None,
     wait: Callable[..., str] = wait_for_stable_text,
 ) -> MuseReplyText:
-    """Send `message` to the named Muse chat and return Muse's full reply text."""
+    """Send `message` to the named Muse chat and return Muse's full reply text.
+
+    With `extension_id`, the chat is driven inside the Muse extension panel so Muse
+    can use the device browser; without it, on the plain muse.ai page.
+    """
     page = context.new_page()
     try:
-        open_chat(page, chat_name)
-        log_box = page.locator(selectors.MESSAGE_LOG).first
-        composer = page.get_by_role("textbox", name=selectors.COMPOSER_LABEL).first
+        root = open_surface(page, extension_id)
+        open_chat(page, chat_name, root)
+        log_box = root.locator(selectors.MESSAGE_LOG).first
+        composer = root.get_by_role("textbox", name=selectors.COMPOSER_LABEL).first
 
         def read_log() -> str:
             try:
@@ -131,7 +162,8 @@ def ask_muse(
         composer.press("Enter")
         log.info("Sent the job to Muse chat %r; waiting for the reply", chat_name)
         text = wait(lambda: extract_reply(before, read_log(), message))
-        return MuseReplyText(text=text, chat_url=page.url)
+        chat_url = root.url if root.url.startswith(selectors.BASE_URL) else page.url
+        return MuseReplyText(text=text, chat_url=chat_url)
     finally:
         page.close()
 

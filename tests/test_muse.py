@@ -57,10 +57,18 @@ def test_muse_settings_are_read():
     assert (muse.enabled, muse.chat_name, muse.max_posts, muse.browser_port) == (True, "My finder", 5, 9300)
 
 
+def test_muse_surface_setting():
+    assert load_settings(env={}, env_file=None).muse.extension_id == "jnakhhjmpmoohbjgfccbccfoifnmbdjd"
+    assert load_settings(env={"MUSE_SURFACE": "web"}, env_file=None).muse.extension_id is None
+    other = "a" * 32
+    assert load_settings(env={"MUSE_EXTENSION_ID": other}, env_file=None).muse.extension_id == other
+
+
 @pytest.mark.parametrize(
     "env",
     [{"MUSE_ENABLED": "maybe"}, {"MUSE_MAX_POSTS": "500"}, {"MUSE_BROWSER_PORT": "80"},
-     {"MUSE_CHAT": "x" * 61}, {"MUSE_CHAT": "bad\tname"}],
+     {"MUSE_CHAT": "x" * 61}, {"MUSE_CHAT": "bad\tname"}, {"MUSE_SURFACE": "app"},
+     {"MUSE_EXTENSION_ID": "../../etc/passwd"}, {"MUSE_EXTENSION_ID": "z" * 32}],
 )
 def test_invalid_muse_settings(env):
     with pytest.raises(ConfigError):
@@ -273,11 +281,12 @@ class FakePage:
     url = "https://muse.ai/chat/abc"
 
     def __init__(self, visible, reply="POSTS START", log_text="earlier messages\n", duplicates=(),
-                 behind_chats_button=()):
+                 behind_chats_button=(), extension="installed"):
         self.visible, self.reply, self.log_text = set(visible), reply, log_text
         self.duplicates = set(duplicates)
         self.behind_chats_button = set(behind_chats_button)
         self.clicks, self.typed, self.closed, self.pressed = [], "", False, []
+        self.extension, self.frames, self.visited = extension, [], []
 
     @property
     def keyboard(self):
@@ -287,7 +296,15 @@ class FakePage:
         self.pressed.append(key)
 
     def goto(self, url, wait_until=None):
-        assert url == "https://muse.ai/"
+        self.visited.append(url)
+        if url.startswith("chrome-extension://"):
+            if self.extension == "missing":
+                raise RuntimeError("net::ERR_BLOCKED_BY_CLIENT")
+            # The panel tab's main frame, plus the embedded muse.ai frame (this fake).
+            panel = type("Frame", (), {"url": url})()
+            self.frames = [panel] if self.extension == "never_loads" else [panel, self]
+        else:
+            assert url == "https://muse.ai/"
 
     def get_by_role(self, role, name, exact=False):
         return FakeLocator(self, role, name)
@@ -329,6 +346,33 @@ def test_ask_muse_with_chat_list_already_open():
     assert page.clicks[0] == CHAT and CHATS not in page.clicks
     assert "Escape" not in page.pressed  # nothing to close
     assert page.typed == "FIND POSTS." and page.closed
+
+
+EXT_ID = "jnakhhjmpmoohbjgfccbccfoifnmbdjd"
+
+
+def test_ask_muse_drives_the_chat_inside_the_extension_panel():
+    # Regression: on the plain muse.ai tab Muse said the device browser was "not
+    # available for this message"; inside the extension panel it may browse.
+    page = FakePage({COMPOSER, CHATS}, behind_chats_button={CHAT}, reply="POSTS START")
+    result = ask_muse(FakeContext(page), "AUTOMATION DEMAND FINDER", "FIND POSTS.",
+                      extension_id=EXT_ID, wait=no_wait)
+    assert page.visited == [f"chrome-extension://{EXT_ID}/panel/index.html"]
+    assert page.clicks[:2] == [CHATS, CHAT] and page.typed == "FIND POSTS."
+    assert result.chat_url == "https://muse.ai/chat/abc"  # the muse.ai frame, not the extension URL
+
+
+def test_extension_not_installed():
+    page = FakePage({COMPOSER}, extension="missing")
+    with pytest.raises(MuseBrowserError, match="Muse from Meta"):
+        ask_muse(FakeContext(page), "AUTOMATION DEMAND FINDER", "x", extension_id=EXT_ID, wait=no_wait)
+    assert page.closed
+
+
+def test_extension_panel_that_never_loads_muse():
+    page = FakePage({COMPOSER}, extension="never_loads")
+    with pytest.raises(MuseBrowserError, match="panel did not load"):
+        ask_muse(FakeContext(page), "AUTOMATION DEMAND FINDER", "x", extension_id=EXT_ID, wait=no_wait)
 
 
 def test_ask_muse_opens_collapsed_chat_list():

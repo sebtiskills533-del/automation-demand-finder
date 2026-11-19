@@ -4,6 +4,17 @@ these are the first thing to fix, and the only place to fix them."""
 import re
 
 BASE_URL = "https://muse.ai"
+
+# The "Muse from Meta" Chrome extension. Only messages sent from its panel may use
+# the device browser (Muse said so on 2026-11-19 when we typed on the muse.ai tab).
+# The panel embeds muse.ai (?surface=chrome_side_panel) in an iframe, so every
+# selector below works inside that frame too.
+DEFAULT_EXTENSION_ID = "jnakhhjmpmoohbjgfccbccfoifnmbdjd"
+EXTENSION_PANEL_PATH = "panel/index.html"
+
+
+def extension_panel_url(extension_id: str) -> str:
+    return f"chrome-extension://{extension_id}/{EXTENSION_PANEL_PATH}"
 COMPOSER_LABEL = "Message"          # role=textbox
 LOGIN_BUTTON = "Log in"             # role=button, exact; only shown when logged out
 CHATS_BUTTON = re.compile(r"^Chats")  # role=button; only present when the chat list is collapsed

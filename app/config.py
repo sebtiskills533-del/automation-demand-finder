@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,6 +11,7 @@ from pathlib import Path
 from dotenv import dotenv_values
 
 from app.errors import ConfigError
+from app.muse.selectors import DEFAULT_EXTENSION_ID
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = PROJECT_ROOT / "config"
@@ -33,6 +35,9 @@ class MuseSettings:
     # 9223, not 9222, so it never touches another app's automation Chrome.
     browser_port: int = 9223
     profile_dir: Path = DEFAULT_MUSE_PROFILE
+    # Drive the chat inside the Muse extension panel (needed for Muse to browse
+    # websites); None = the plain muse.ai page (MUSE_SURFACE=web).
+    extension_id: str | None = DEFAULT_EXTENSION_ID
 
 
 @dataclass(frozen=True)
@@ -92,6 +97,7 @@ def load_settings(
             chrome_path=Path(values.get("CHROME_PATH") or DEFAULT_CHROME_PATH),
             browser_port=_int_setting(values, "MUSE_BROWSER_PORT", 9223, 1024, 65535),
             profile_dir=Path(values.get("MUSE_PROFILE_DIR") or DEFAULT_MUSE_PROFILE),
+            extension_id=_muse_extension_id(values),
         ),
     )
 
@@ -150,6 +156,19 @@ def _muse_chat_name(raw: str) -> str:
     if len(name) > 60 or any(ord(c) < 32 for c in name):
         raise ConfigError("MUSE_CHAT must be a chat name of at most 60 characters.")
     return name
+
+
+def _muse_extension_id(values: Mapping[str, str]) -> str | None:
+    surface = (values.get("MUSE_SURFACE") or "extension").strip().lower()
+    if surface == "web":
+        return None
+    if surface != "extension":
+        raise ConfigError(f"MUSE_SURFACE must be 'extension' or 'web', got {surface!r}.")
+    ext_id = (values.get("MUSE_EXTENSION_ID") or DEFAULT_EXTENSION_ID).strip()
+    # Chrome extension ids are 32 letters a-p; anything else would go into a URL.
+    if not re.fullmatch(r"[a-p]{32}", ext_id):
+        raise ConfigError("MUSE_EXTENSION_ID must be a 32-letter Chrome extension id.")
+    return ext_id
 
 
 def _log_level(raw: str) -> str:
