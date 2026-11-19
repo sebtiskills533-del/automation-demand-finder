@@ -431,7 +431,10 @@ def muse_settings(settings):
 
 def test_job_message_and_focus():
     assert "Focus: Etsy sellers." in build_job_message("Etsy sellers", 20)
-    assert "Maximum 20 posts" in build_job_message("", 20)
+    message = build_job_message("", 20)
+    assert "Maximum 20 posts" in message
+    assert "browser" in message and "PROBLEM:" in message and "NO POSTS FOUND:" in message
+    assert "\n" not in message  # typed as one line; Enter would send it early
     assert clean_focus("  Etsy \n sellers ") == "Etsy sellers"
     with pytest.raises(ConfigError):
         clean_focus("x" * 101)

@@ -51,8 +51,11 @@ def clean_focus(focus: str) -> str:
 def build_job_message(focus: str, max_posts: int) -> str:
     """The single line typed into the Muse side chat (the procedure is already there)."""
     return (
-        f"FIND POSTS. Focus: {focus or DEFAULT_FOCUS}. "
-        f"Maximum {max_posts} posts. Reply only in the exact format from your procedure."
+        f"FIND POSTS. Focus: {focus or DEFAULT_FOCUS}. Maximum {max_posts} posts. "
+        "Use your browser (the Muse Chrome extension) to actually open Quora, Facebook and Instagram "
+        "and search them. If you cannot open them, reply PROBLEM: <what happened>. If nothing matches, "
+        "reply NO POSTS FOUND: <where you looked and why>. Otherwise reply only in the exact "
+        "POSTS START / POSTS END format from your procedure."
     )
 
 
