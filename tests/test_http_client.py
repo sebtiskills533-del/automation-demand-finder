@@ -16,7 +16,7 @@ def test_user_agent_is_set_and_formatted():
     session = FakeSession()
     make_client(session)
     assert session.headers["User-Agent"] == "test-agent"
-    assert build_user_agent("safi").endswith("(by /u/safi)")
+    assert build_user_agent("shop_owner_1").endswith("(by /u/shop_owner_1)")
     assert build_user_agent().startswith("python:automation-demand-finder:")
 
 

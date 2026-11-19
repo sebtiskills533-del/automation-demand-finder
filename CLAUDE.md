@@ -1,6 +1,6 @@
 # Automation Demand Finder — notes for Claude Code
 
-A personal tool for one user (Safi, a beginner). It collects public posts where
+A personal tool for one user (a beginner). It collects public posts where
 people ask for small automations, has Claude score them, and shows a ranked,
 password-protected Streamlit dashboard on the user's own computer.
 

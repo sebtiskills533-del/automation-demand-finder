@@ -42,7 +42,7 @@ def test_invalid_values_raise_clear_errors(env):
 
 
 def test_reddit_username_prefix_is_removed():
-    assert load_settings(env={"REDDIT_USERNAME": "u/safi_dev"}, env_file=None).reddit_username == "safi_dev"
+    assert load_settings(env={"REDDIT_USERNAME": "u/shop_owner_1"}, env_file=None).reddit_username == "shop_owner_1"
 
 
 def test_env_file_is_read_and_environment_wins(tmp_path: Path):
