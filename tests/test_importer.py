@@ -115,6 +115,15 @@ def test_same_link_variants_are_one_post():
     assert a.id == b.id
 
 
+def test_quora_unanswered_link_is_the_same_question():
+    # Regression: Muse returned the same Quora question with and without /unanswered/.
+    a = row_to_post({"url": "https://www.quora.com/unanswered/How-do-I-automate-WhatsApp", "title": "T"}, NOW)
+    b = row_to_post({"url": "https://www.quora.com/How-do-I-automate-WhatsApp", "title": "T"}, NOW)
+    assert a.id == b.id
+    other = row_to_post({"url": "https://www.example.com/unanswered/How-do-I-automate-WhatsApp", "title": "T"}, NOW)
+    assert other.id != row_to_post({"url": "https://www.example.com/How-do-I-automate-WhatsApp", "title": "T"}, NOW).id
+
+
 def test_import_saves_skips_filter_and_dedupes(conn):
     report = import_text(conn, CSV, now=lambda: NOW)
     assert (report.added, report.duplicates, report.errors) == (2, 0, [])

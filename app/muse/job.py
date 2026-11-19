@@ -19,12 +19,14 @@ from app.domain import utc_now
 from app.errors import AppError, ConfigError
 from app.importer import import_rows
 from app.muse.browser import STALE_LOCK_SECONDS, BrowserLock, connected_context
-from app.muse.client import MuseReplyText, ask_muse
-from app.muse.parse import parse_muse_reply
+from app.muse.client import MuseReplyText, ask_muse, read_latest_reply
+from app.muse.parse import parse_muse_reply, reply_is_complete
 
 log = logging.getLogger(__name__)
 
 MAX_FOCUS_CHARS = 100
+JOB_PREFIX = "FIND POSTS."  # every job line starts with this (see build_job_message)
+RECOVERED_FOCUS = "(imported Muse's last reply)"
 DEFAULT_FOCUS = "any small business or freelancer asking for help automating a repetitive task"
 
 
@@ -51,7 +53,7 @@ def clean_focus(focus: str) -> str:
 def build_job_message(focus: str, max_posts: int) -> str:
     """The single line typed into the Muse side chat (the procedure is already there)."""
     return (
-        f"FIND POSTS. Focus: {focus or DEFAULT_FOCUS}. Maximum {max_posts} posts. "
+        f"{JOB_PREFIX} Focus: {focus or DEFAULT_FOCUS}. Maximum {max_posts} posts. "
         "Use your browser (the Muse Chrome extension) to actually open Quora, Facebook and Instagram "
         "and search them. If you cannot open them, reply PROBLEM: <what happened>. If nothing matches, "
         "reply NO POSTS FOUND: <where you looked and why>. Otherwise reply only in the exact "
@@ -72,22 +74,60 @@ def run_muse_collection(
     `ask(message)` returns Muse's reply; by default it drives the app's Chrome.
     `rate()` rates waiting posts and returns how many; None = don't rate.
     """
-    muse = settings.muse
-    if not muse.enabled:
-        raise ConfigError("Muse is switched off. Set MUSE_ENABLED=true in .env to use it.")
+    muse = _require_enabled(settings)
     focus = clean_focus(focus)
-    store.fail_stale_muse_runs(conn, utc_now() - timedelta(seconds=STALE_LOCK_SECONDS))
-    run_id = store.start_muse_run(conn, focus)
     message = build_job_message(focus, muse.max_posts)
 
     if ask is None:
         def ask(text: str) -> MuseReplyText:
             with connected_context(muse) as context:
-                return ask_muse(context, muse.chat_name, text, extension_id=muse.extension_id)
+                return ask_muse(context, muse.chat_name, text, extension_id=muse.extension_id,
+                                is_complete=reply_is_complete)
 
+    return _run(conn, settings, focus, lambda: ask(message), rate)
+
+
+def import_latest_reply(
+    conn: sqlite3.Connection,
+    settings: Settings,
+    *,
+    read: Callable[[], MuseReplyText] | None = None,
+    rate: Callable[[], int] | None = None,
+) -> MuseRunResult:
+    """Import Muse's reply to the most recent job WITHOUT sending a new one.
+
+    For when Muse finished after a run had stopped reading (it is safe to repeat:
+    posts already in the app are counted as duplicates, never added twice).
+    """
+    muse = _require_enabled(settings)
+    if read is None:
+        def read() -> MuseReplyText:
+            with connected_context(muse) as context:
+                return read_latest_reply(context, muse.chat_name, JOB_PREFIX, extension_id=muse.extension_id)
+
+    return _run(conn, settings, RECOVERED_FOCUS, read, rate)
+
+
+def _require_enabled(settings: Settings):
+    if not settings.muse.enabled:
+        raise ConfigError("Muse is switched off. Set MUSE_ENABLED=true in .env to use it.")
+    return settings.muse
+
+
+def _run(
+    conn: sqlite3.Connection,
+    settings: Settings,
+    focus: str,
+    get_reply: Callable[[], MuseReplyText],
+    rate: Callable[[], int] | None,
+) -> MuseRunResult:
+    """Shared steps: get the reply (holding the browser lock), parse, import, rate, record."""
+    muse = settings.muse
+    store.fail_stale_muse_runs(conn, utc_now() - timedelta(seconds=STALE_LOCK_SECONDS))
+    run_id = store.start_muse_run(conn, focus)
     try:
         with BrowserLock(settings.db_path.parent / "muse.lock"):
-            reply = ask(message)
+            reply = get_reply()
         parsed = parse_muse_reply(reply.text, muse.max_posts)
         report = import_rows(conn, parsed.rows)
     except AppError as exc:

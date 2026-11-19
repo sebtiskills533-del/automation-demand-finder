@@ -172,8 +172,17 @@ def _muse_section(conn: sqlite3.Connection, settings: Settings) -> None:
         st.info("A Muse run is in progress.")
 
     runs = store.recent_muse_runs(conn, 5)
-    if st.button("Refresh"):
+    r1, r2 = st.columns([1, 3])
+    if r1.button("🔄 Refresh"):
         st.rerun()
+    if r2.button("📥 Import Muse's last reply", disabled=running,
+                 help="Muse finished after the app stopped waiting? This reads its last reply from the chat "
+                      "and imports the posts, without sending a new job. Safe to repeat."):
+        try:
+            start_background_import_last()
+            st.success("Reading Muse's last reply. Click 'Refresh' in about 30 seconds.")
+        except OSError as exc:
+            st.error(f"Could not start: {exc}")
     if runs:
         st.dataframe(
             [
@@ -194,9 +203,16 @@ def _muse_section(conn: sqlite3.Connection, settings: Settings) -> None:
 
 def start_background_run(focus: str) -> None:
     """Run `python -m app.muse run` as its own process so the dashboard stays responsive."""
-    args = [sys.executable, "-m", "app.muse", "run"]
-    if focus:
-        args += ["--focus", focus]  # an argument list: no shell, so no injection
+    _start_muse_process(["run", "--focus", focus] if focus else ["run"])
+
+
+def start_background_import_last() -> None:
+    _start_muse_process(["import-last"])
+
+
+def _start_muse_process(muse_args: list[str]) -> None:
+    # An argument list, never a shell, so nothing typed can be run as a command.
+    args = [sys.executable, "-m", "app.muse", *muse_args]
     options: dict = {"cwd": PROJECT_ROOT, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
     if sys.platform == "win32":
         options["creationflags"] = subprocess.CREATE_NO_WINDOW

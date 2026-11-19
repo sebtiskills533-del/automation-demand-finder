@@ -146,7 +146,11 @@ def _text(value: object) -> str:
 def _post_id(parsed) -> str:
     """Same link (ignoring www., letter case of the host and #fragment) -> same id."""
     host = parsed.hostname.lower().removeprefix("www.")
-    key = f"{host}{parsed.path.rstrip('/')}?{parsed.query}"
+    path = parsed.path.rstrip("/")
+    if host.endswith("quora.com"):
+        # Quora shows one question at /Question and at /unanswered/Question.
+        path = path.removeprefix("/unanswered")
+    key = f"{host}{path}?{parsed.query}"
     return "import_" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
 
 

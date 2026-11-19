@@ -206,6 +206,30 @@ def test_wait_returns_after_text_is_quiet():
     assert 60 <= clock.now < 70
 
 
+def test_long_silent_browsing_is_not_mistaken_for_the_end():
+    # Regression (Muse run 5): Muse wrote "Opening Quora..." then browsed silently
+    # for over 60 s; the app stopped reading before the posts arrived.
+    from app.muse.parse import reply_is_complete
+
+    clock = Clock()
+    timeline = [(0, "Opening Quora, Facebook and Instagram..."),
+                (150, "Opening...\nPOSTS START\nurl,title\nhttps://www.quora.com/q,Q\nPOSTS END")]
+
+    def read():
+        return [text for at, text in timeline if clock.now >= at][-1]
+
+    result = wait_for_stable_text(read, is_complete=reply_is_complete, clock=clock.time, sleep=clock.sleep)
+    assert "POSTS END" in result
+    assert 150 <= clock.now <= 165  # finished ~10 s after the end signal, not after 60 s of silence
+
+
+def test_reply_without_end_signal_finishes_after_long_quiet():
+    clock = Clock()
+    result = wait_for_stable_text(lambda: "Sure, here are some ideas", is_complete=lambda t: False,
+                                  quiet_seconds=600, clock=clock.time, sleep=clock.sleep)
+    assert result == "Sure, here are some ideas" and 600 <= clock.now < 610
+
+
 def test_wait_times_out_while_still_changing():
     clock = Clock()
     counter = iter(range(10_000))
@@ -336,7 +360,7 @@ class FakeContext:
         return self.page
 
 
-def no_wait(read):
+def no_wait(read, **kwargs):
     return read()
 
 
@@ -431,6 +455,30 @@ def test_ask_muse_missing_chat():
 
 
 # --------------------------------------------------------------- parsing
+
+
+def test_reply_is_complete():
+    from app.muse.parse import reply_is_complete
+
+    assert reply_is_complete(GOOD_REPLY)
+    assert reply_is_complete("NO POSTS FOUND: nothing this week")
+    assert reply_is_complete("PROBLEM: logged out of Facebook")
+    assert not reply_is_complete("Opening Quora, Facebook and Instagram...\nBrowser")
+    assert not reply_is_complete("POSTS START\nurl,title\nhttps://x.com/a,T")  # still writing
+
+
+def test_parse_joins_rows_the_chat_page_wrapped():
+    # Regression: one of Muse's 11 rows was split over two lines and the rows
+    # after it were lost.
+    text = ("POSTS START\nurl,title,text,source,author,posted_at\n"
+            'https://www.facebook.com/groups/1/posts/2,Need help,"First half of a long\n'
+            'second half of the text",Facebook,Ann,2026-11-18\n'
+            "Copy\n"
+            "https://www.quora.com/q2,Q2,\"t\",Quora,Bo,\n"
+            "POSTS END")
+    rows = parse_muse_reply(text, 20).rows
+    assert [r["source"] for r in rows] == ["Facebook", "Quora"]
+    assert rows[0]["text"] == "First half of a long second half of the text"
 
 
 def test_parse_good_reply_ignores_code_fences_and_copy_button():
@@ -564,6 +612,38 @@ def test_stale_running_rows_are_failed(conn):
 # ------------------------------------------------------------------- CLI
 
 
+def test_import_latest_reply_imports_without_sending(conn, muse_settings):
+    from app.muse.job import RECOVERED_FOCUS, import_latest_reply
+
+    result = import_latest_reply(conn, muse_settings, read=lambda: MuseReplyText(GOOD_REPLY, "https://muse.ai/t"),
+                                 rate=lambda: 2)
+    assert result.ok and (result.added, result.rated) == (2, 2)
+    assert store.recent_muse_runs(conn)[0]["focus"] == RECOVERED_FOCUS
+    again = import_latest_reply(conn, muse_settings, read=lambda: MuseReplyText(GOOD_REPLY, ""))
+    assert (again.added, again.duplicates) == (0, 2)  # safe to repeat
+
+
+def test_import_latest_reply_with_empty_chat_fails_clearly(conn, muse_settings):
+    from app.muse.job import import_latest_reply
+
+    result = import_latest_reply(conn, muse_settings, read=lambda: MuseReplyText("", ""))
+    assert not result.ok and "expected format" in result.message
+
+
+def test_read_latest_reply_returns_text_after_the_last_job():
+    from app.muse.client import read_latest_reply
+
+    log = ("FIND POSTS. old job\nold reply\n"
+           "FIND POSTS. Focus: x. Maximum 20 posts. Use your browser...\nPOSTS START\nnew\nPOSTS END")
+    page = FakePage({COMPOSER, CHAT}, log_text=log)
+    reply = read_latest_reply(FakeContext(page), "AUTOMATION DEMAND FINDER", "FIND POSTS.")
+    assert reply.text == "POSTS START\nnew\nPOSTS END"
+    assert page.typed == ""  # nothing was sent
+    empty = read_latest_reply(FakeContext(FakePage({COMPOSER, CHAT}, log_text="hello")),
+                              "AUTOMATION DEMAND FINDER", "FIND POSTS.")
+    assert empty.text == ""
+
+
 def test_cli_open_chrome_and_run(monkeypatch, settings, capsys):
     from app import cli
     from app.muse import __main__ as muse_cli
@@ -584,6 +664,13 @@ def test_cli_open_chrome_and_run(monkeypatch, settings, capsys):
     assert muse_cli.main(["run", "--focus", "Etsy"]) == 0
     assert seen["focus"] == "Etsy" and seen["rate"] is not None  # API key present -> rates
     assert muse_cli.main(["run", "--no-rate"]) == 0 and seen["rate"] is None
+
+    def fake_import(conn, settings_, rate=None):
+        seen["import_rate"] = rate
+        return MuseRunResult(2, True, "Import: 10 added.", added=10)
+
+    monkeypatch.setattr(muse_cli, "import_latest_reply", fake_import)
+    assert muse_cli.main(["import-last"]) == 0 and seen["import_rate"] is not None
     assert "Done: Import: 2 added." in capsys.readouterr().out
 
 
@@ -594,4 +681,5 @@ def test_procedure_document_matches_parser():
     reply = parse_muse_reply("POSTS START" + example + "POSTS END", 20)
     assert len(reply.rows) == 2
     assert all(r["url"].startswith("https://") for r in reply.rows)
-    assert client.QUIET_SECONDS == 60 and client.REPLY_TIMEOUT_SECONDS == 1800
+    assert client.QUIET_SECONDS == 600 and client.COMPLETE_QUIET_SECONDS == 10
+    assert client.REPLY_TIMEOUT_SECONDS == 1800

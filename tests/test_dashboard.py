@@ -375,6 +375,17 @@ def test_import_page_shows_muse_runs_and_blocks_double_start(env, monkeypatch):
     assert len(at.dataframe) == 1
 
 
+def test_import_last_reply_button_starts_background_import(env, monkeypatch):
+    from app.ui import import_page
+
+    monkeypatch.setenv("MUSE_ENABLED", "true")
+    started = []
+    monkeypatch.setattr(import_page, "start_background_import_last", lambda: started.append(True))
+    at = AppTest.from_function(_import_page_app, default_timeout=TIMEOUT).run()
+    at = _click(at, "📥 Import Muse's last reply")
+    assert not at.exception and started == [True]
+
+
 def test_start_background_run_uses_argument_list(monkeypatch):
     from app.ui import import_page
 

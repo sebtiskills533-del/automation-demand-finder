@@ -23,6 +23,7 @@ _END = re.compile(r"^\W*POSTS\s+END\W*$", re.IGNORECASE)
 _HEADER = re.compile(r"^\s*url\s*,\s*title\b", re.IGNORECASE)
 _ROW = re.compile(r'^\s*"?https://', re.IGNORECASE)
 _FENCE = re.compile(r"^\s*```")
+_NOISE = re.compile(r"^\s*(copy|csv|copied!?)\s*$", re.IGNORECASE)  # code-block chrome
 _NO_POSTS = re.compile(r"^\W*NO\s+POSTS\s+FOUND\b\W*(?P<reason>.*)$", re.IGNORECASE)
 
 
@@ -42,9 +43,10 @@ def parse_muse_reply(text: str, max_posts: int) -> MuseReply:
     lines = clean_chat_text(text).splitlines()
 
     problem = next((ln.strip() for ln in lines if ln.strip().upper().startswith("PROBLEM:")), None)
-    # Inside the markers, still keep only the header and the rows: the chat page
-    # can add a "csv" code-block label or a "Copy" button line.
-    csv_lines = _after_header(_between_markers(lines)) or _after_header(lines)
+    # Inside the markers everything belongs to the list, so a long row the chat
+    # page wrapped onto two lines is joined back; outside them we stop at the
+    # first non-row line (sign-offs, timestamps).
+    csv_lines = _after_header(_between_markers(lines), join_wrapped=True) or _after_header(lines)
 
     if not csv_lines:
         if problem:
@@ -75,16 +77,32 @@ def _between_markers(lines: list[str]) -> list[str]:
     return lines[start + 1 : end]
 
 
-def _after_header(lines: list[str]) -> list[str]:
-    """Fallback when Muse forgot the markers: the header line plus the rows after it."""
+def reply_is_complete(text: str) -> bool:
+    """True once Muse's reply shows its end signal: POSTS END, NO POSTS FOUND or PROBLEM:."""
+    for line in clean_chat_text(text).splitlines():
+        if _END.match(line) or _NO_POSTS.match(line) or line.strip().upper().startswith("PROBLEM:"):
+            return True
+    return False
+
+
+def _after_header(lines: list[str], join_wrapped: bool = False) -> list[str]:
+    """The header line plus the rows after it.
+
+    join_wrapped=True (inside the markers): a line that doesn't start a new row
+    is the wrapped end of the previous row and is joined back onto it.
+    Otherwise the first non-row line ends the list (sign-off text, timestamps).
+    """
     header = next((i for i, ln in enumerate(lines) if _HEADER.match(ln)), None)
     if header is None:
         return []
-    rows = []
+    rows: list[str] = []
     for line in lines[header + 1 :]:
-        if _FENCE.match(line) or not line.strip():
+        if _FENCE.match(line) or not line.strip() or _NOISE.match(line):
             continue
-        if not _ROW.match(line):
-            break  # sign-off text, timestamps, buttons...
-        rows.append(line)
+        if _ROW.match(line):
+            rows.append(line)
+        elif join_wrapped and rows:
+            rows[-1] = f"{rows[-1]} {line.strip()}"
+        else:
+            break
     return [lines[header], *rows] if rows else []

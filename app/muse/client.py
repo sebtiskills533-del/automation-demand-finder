@@ -12,9 +12,12 @@ from app.muse import selectors
 
 log = logging.getLogger(__name__)
 
-# Muse is an agent: it works in steps and can go quiet between them, so a
-# reply only counts as finished after this long without any new text.
-QUIET_SECONDS = 60
+# Muse is an agent: it works in steps and can browse silently for minutes
+# (run 5, 2026-11-19: over 60 s of silence while it searched Facebook). So a
+# reply is finished when it shows its end signal and then stays unchanged for
+# COMPLETE_QUIET_SECONDS; without an end signal only after QUIET_SECONDS.
+QUIET_SECONDS = 10 * 60
+COMPLETE_QUIET_SECONDS = 10
 REPLY_TIMEOUT_SECONDS = 30 * 60
 POLL_SECONDS = 1.0
 PAGE_LOAD_SECONDS = 30
@@ -30,13 +33,20 @@ class MuseReplyText:
 def wait_for_stable_text(
     read: Callable[[], str],
     *,
+    is_complete: Callable[[str], bool] | None = None,
     quiet_seconds: float = QUIET_SECONDS,
+    complete_quiet_seconds: float = COMPLETE_QUIET_SECONDS,
     timeout_seconds: float = REPLY_TIMEOUT_SECONDS,
     poll_seconds: float = POLL_SECONDS,
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
 ) -> str:
-    """Poll `read` until its (non-empty) text stops changing for `quiet_seconds`."""
+    """Poll `read` until the reply is finished.
+
+    Finished = it passes `is_complete` (its end signal is there) and hasn't
+    changed for `complete_quiet_seconds`, or it hasn't changed at all for
+    `quiet_seconds` (a fallback for replies without an end signal).
+    """
     deadline = clock() + timeout_seconds
     last = ""
     quiet_since = clock()
@@ -45,8 +55,11 @@ def wait_for_stable_text(
         if text != last:
             last = text
             quiet_since = clock()
-        elif text and clock() - quiet_since >= quiet_seconds:
-            return text
+        elif text:
+            quiet_for = clock() - quiet_since
+            complete = is_complete is not None and is_complete(text)
+            if (complete and quiet_for >= complete_quiet_seconds) or quiet_for >= quiet_seconds:
+                return text
         sleep(poll_seconds)
     raise MuseTimeoutError("Muse's reply did not finish in time. Open the chat in the app's Chrome and look.")
 
@@ -143,36 +156,70 @@ def ask_muse(
     message: str,
     *,
     extension_id: str | None = None,
+    is_complete: Callable[[str], bool] | None = None,
     wait: Callable[..., str] = wait_for_stable_text,
 ) -> MuseReplyText:
     """Send `message` to the named Muse chat and return Muse's full reply text.
 
     With `extension_id`, the chat is driven inside the Muse extension panel so Muse
     can use the device browser; without it, on the plain muse.ai page.
+    `is_complete` recognises a finished reply (its end signal), so a long silent
+    browsing step isn't mistaken for the end.
     """
     page = context.new_page()
     try:
         root = open_surface(page, extension_id)
         open_chat(page, chat_name, root)
-        log_box = root.locator(selectors.MESSAGE_LOG).first
+        read_log = _log_reader(root)
         composer = root.get_by_role("textbox", name=selectors.COMPOSER_LABEL).first
-
-        def read_log() -> str:
-            try:
-                return log_box.inner_text() or ""
-            except Exception:  # noqa: BLE001 - the log can re-render while Muse writes
-                return ""
 
         before = read_log()
         composer.click()
         composer.fill(message)
         composer.press("Enter")
         log.info("Sent the job to Muse chat %r; waiting for the reply", chat_name)
-        text = wait(lambda: extract_reply(before, read_log(), message))
-        chat_url = root.url if root.url.startswith(selectors.BASE_URL) else page.url
-        return MuseReplyText(text=text, chat_url=chat_url)
+        text = wait(lambda: extract_reply(before, read_log(), message), is_complete=is_complete)
+        return MuseReplyText(text=text, chat_url=_chat_url(page, root))
     finally:
         page.close()
+
+
+def read_latest_reply(
+    context, chat_name: str, job_prefix: str, *, extension_id: str | None = None
+) -> MuseReplyText:
+    """Muse's reply to the most recent job in the chat, without sending anything.
+    Used to recover a reply that finished after a run stopped reading."""
+    page = context.new_page()
+    try:
+        root = open_surface(page, extension_id)
+        open_chat(page, chat_name, root)
+        page.wait_for_timeout(2000)  # let the chat history render
+        text = _log_reader(root)()
+        start = text.rfind(job_prefix)
+        if start == -1:
+            return MuseReplyText(text="", chat_url=_chat_url(page, root))
+        # Skip the job line itself; the reply starts on the next line.
+        newline = text.find("\n", start)
+        reply = text[newline + 1:] if newline != -1 else ""
+        return MuseReplyText(text=reply.strip(), chat_url=_chat_url(page, root))
+    finally:
+        page.close()
+
+
+def _log_reader(root) -> Callable[[], str]:
+    log_box = root.locator(selectors.MESSAGE_LOG).first
+
+    def read() -> str:
+        try:
+            return log_box.inner_text() or ""
+        except Exception:  # noqa: BLE001 - the log can re-render while Muse writes
+            return ""
+
+    return read
+
+
+def _chat_url(page, root) -> str:
+    return root.url if root.url.startswith(selectors.BASE_URL) else page.url
 
 
 def _visible(locator) -> bool:
