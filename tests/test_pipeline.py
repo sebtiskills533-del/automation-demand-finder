@@ -53,6 +53,25 @@ def test_second_run_does_no_duplicate_work(conn, settings):
     assert report.analyzed.analyzed == 0
 
 
+def test_daily_run_groups_top_problems(conn, settings):
+    posts = [make_post(f"reddit_{i}", title=f"How do I automate orders {i}?") for i in range(2)]
+    grouping = {"groups": [{"id": "orders", "name": "Orders", "description": "", "post_numbers": [1, 2]}]}
+    runtime = make_runtime(conn, settings, [FakeSource("r/x", posts)],
+                           fake_message(GOOD), fake_message(GOOD), fake_message(grouping))
+    report = run_daily(runtime)
+    assert report.grouping == "2 posts in 1 groups."
+    assert any(line.startswith("Top problems:") for line in report.summary_lines(88))
+
+
+def test_grouping_failure_never_breaks_the_daily_run(conn, settings):
+    posts = [make_post(f"reddit_{i}", title=f"How do I automate orders {i}?") for i in range(2)]
+    runtime = make_runtime(conn, settings, [FakeSource("r/x", posts)],
+                           fake_message(GOOD), fake_message(GOOD), fake_message("bad"), fake_message("bad"))
+    report = run_daily(runtime)
+    assert report.analyzed.analyzed == 2
+    assert report.grouping.startswith("skipped")
+
+
 def test_open_runtime_turns_config_errors_into_clean_exit(monkeypatch, capsys):
     def broken():
         raise ConfigError("MAX_POSTS_PER_RUN must be a whole number")

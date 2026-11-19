@@ -59,6 +59,10 @@ PATHS = ("Product", "Reply", "Custom job")
 MAX_TITLE_CHARS = 500
 MAX_BODY_CHARS = 20_000
 MAX_NOTES_CHARS = 2_000
+MAX_REPLY_CHARS = 3_000
+
+TICKED_STATUSES = ("Ticked", "Building", "Done", "Sold")  # "acted on": reports allowed
+REPORT_VERDICTS = ("Do it", "Think first", "Skip")
 
 
 @dataclass(frozen=True)

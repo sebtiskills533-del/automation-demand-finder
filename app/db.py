@@ -106,7 +106,38 @@ CREATE TABLE muse_runs (
 CREATE INDEX idx_muse_runs_started ON muse_runs (started_at DESC);
 """
 
-MIGRATIONS: tuple[str, ...] = (_SCHEMA_V1, _SCHEMA_V2)
+_SCHEMA_V3 = """
+CREATE TABLE decision_reports (
+    post_id           TEXT PRIMARY KEY REFERENCES posts (id) ON DELETE CASCADE,
+    verdict           TEXT NOT NULL CHECK (verdict IN ('Do it', 'Think first', 'Skip')),
+    reasons           TEXT NOT NULL,
+    plan              TEXT NOT NULL,
+    build_hours       REAL NOT NULL CHECK (build_hours >= 0),
+    delivery_min_days INTEGER,
+    delivery_max_days INTEGER,
+    contact_method    TEXT NOT NULL,
+    draft             TEXT NOT NULL,
+    model             TEXT NOT NULL,
+    created_at        TEXT NOT NULL
+);
+
+CREATE TABLE clusters (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    updated_at  TEXT NOT NULL
+);
+CREATE INDEX idx_analyses_cluster ON analyses (cluster_id);
+
+CREATE TABLE product_specs (
+    cluster_id TEXT PRIMARY KEY REFERENCES clusters (id) ON DELETE CASCADE,
+    spec       TEXT NOT NULL,
+    model      TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+"""
+
+MIGRATIONS: tuple[str, ...] = (_SCHEMA_V1, _SCHEMA_V2, _SCHEMA_V3)
 
 
 def connect(db_path: Path) -> sqlite3.Connection:

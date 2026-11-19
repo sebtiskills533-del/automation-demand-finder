@@ -6,6 +6,7 @@ fixed lists (never user text) into the SQL itself.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -17,8 +18,10 @@ from app.domain import (
     DIFFICULTIES,
     MAX_BODY_CHARS,
     MAX_NOTES_CHARS,
+    MAX_REPLY_CHARS,
     MAX_TITLE_CHARS,
     PATHS,
+    REPORT_VERDICTS,
     STATUSES,
     AnalysisRecord,
     Post,
@@ -162,11 +165,11 @@ def delete_analyses(conn: sqlite3.Connection, post_ids: Iterable[str]) -> int:
 
 # -------------------------------------------------------------- actions
 
-_ACTION_FIELDS = ("status", "path", "notes")
+_ACTION_FIELDS = ("status", "path", "notes", "reply_draft")
 
 
 def update_action(conn: sqlite3.Connection, post_id: str, **changes: str | None) -> None:
-    """Change status, path and/or notes for a post (creating its action row).
+    """Change status, path, notes and/or the reply draft for a post (creating its action row).
 
     Example: update_action(conn, "reddit_abc", status="Ticked", path="Product")
     """
@@ -184,6 +187,11 @@ def update_action(conn: sqlite3.Connection, post_id: str, **changes: str | None)
         if len(notes) > MAX_NOTES_CHARS:
             raise ValueError(f"Notes can be at most {MAX_NOTES_CHARS} characters")
         changes["notes"] = notes
+    if "reply_draft" in changes:
+        draft = changes["reply_draft"] or ""
+        if len(draft) > MAX_REPLY_CHARS:
+            raise ValueError(f"A reply can be at most {MAX_REPLY_CHARS} characters")
+        changes["reply_draft"] = draft
 
     columns = [field for field in _ACTION_FIELDS if field in changes]  # fixed names only
     placeholders = ", ".join("?" for _ in columns)
@@ -223,7 +231,8 @@ _DASHBOARD_SELECT = """
            a.product_potential, a.seriousness, a.seriousness_reason, a.wants_to_hire,
            a.region_hint, a.reason, a.delivery_min_days, a.delivery_max_days,
            a.contact_method, a.opportunity_score, a.model,
-           COALESCE(ac.status, ?) AS status, ac.path, COALESCE(ac.notes, '') AS notes
+           COALESCE(ac.status, ?) AS status, ac.path, COALESCE(ac.notes, '') AS notes,
+           COALESCE(ac.reply_draft, '') AS reply_draft, a.cluster_id
     FROM posts p
     JOIN analyses a ON a.post_id = p.id
     LEFT JOIN actions ac ON ac.post_id = p.id
@@ -279,6 +288,151 @@ def count_dashboard_rows(conn: sqlite3.Connection, filters: DashboardFilters) ->
            LEFT JOIN actions ac ON ac.post_id = p.id""" + where,
         params,
     ).fetchone()[0]
+
+
+def get_post_details(conn: sqlite3.Connection, post_id: str) -> dict | None:
+    """One analysed post with everything the detail panel shows."""
+    row = conn.execute(_DASHBOARD_SELECT + " WHERE p.id = ?", (DEFAULT_STATUS, post_id)).fetchone()
+    return dict(row) if row else None
+
+
+def dashboard_counts(conn: sqlite3.Connection, best_score: int, since: datetime) -> dict[str, int]:
+    """Numbers for the summary row at the top of the dashboard."""
+    row = conn.execute(
+        """SELECT COUNT(*) AS analyzed,
+                  COALESCE(SUM(a.opportunity_score >= ?), 0) AS best,
+                  COALESCE(SUM(COALESCE(ac.status, 'New') IN ('Ticked', 'Building')), 0) AS active,
+                  COALESCE(SUM(a.analyzed_at >= ?), 0) AS new_today
+           FROM analyses a LEFT JOIN actions ac ON ac.post_id = a.post_id""",
+        (best_score, to_iso(since)),
+    ).fetchone()
+    return dict(row)
+
+
+# -------------------------------------------------------- decision reports
+
+
+def save_decision_report(conn: sqlite3.Connection, report: dict) -> None:
+    """`report` keys: post_id, verdict, reasons (list), plan (list of dicts), build_hours,
+    delivery_min_days, delivery_max_days, contact_method, draft, model."""
+    if report["verdict"] not in REPORT_VERDICTS:
+        raise ValueError("Unknown verdict")
+    with transaction(conn):
+        conn.execute(
+            """INSERT OR REPLACE INTO decision_reports
+               (post_id, verdict, reasons, plan, build_hours, delivery_min_days, delivery_max_days,
+                contact_method, draft, model, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                report["post_id"], report["verdict"], json.dumps(report["reasons"]),
+                json.dumps(report["plan"]), report["build_hours"], report["delivery_min_days"],
+                report["delivery_max_days"], report["contact_method"], report["draft"],
+                report["model"], to_iso(utc_now()),
+            ),
+        )
+
+
+def get_decision_report(conn: sqlite3.Connection, post_id: str) -> dict | None:
+    row = conn.execute("SELECT * FROM decision_reports WHERE post_id = ?", (post_id,)).fetchone()
+    if row is None:
+        return None
+    report = dict(row)
+    report["reasons"] = json.loads(report["reasons"])
+    report["plan"] = json.loads(report["plan"])
+    return report
+
+
+# --------------------------------------------------------------- clusters
+
+
+def job_summaries_since(conn: sqlite3.Connection, since: datetime, limit: int) -> list[dict]:
+    """Recent analysed posts that are real jobs (not news or showcases), newest first."""
+    rows = conn.execute(
+        """SELECT a.post_id, a.summary, a.category FROM analyses a
+           WHERE a.analyzed_at >= ? AND (a.buildable = 1 OR a.est_hours > 0)
+           ORDER BY a.analyzed_at DESC LIMIT ?""",
+        (to_iso(since), limit),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def latest_analysis_time(conn: sqlite3.Connection) -> str | None:
+    return conn.execute("SELECT MAX(analyzed_at) FROM analyses").fetchone()[0]
+
+
+def replace_clusters(
+    conn: sqlite3.Connection,
+    clusters: Iterable[tuple[str, str, str, list[str]]],
+    window_post_ids: Iterable[str],
+) -> None:
+    """Save a fresh grouping: (id, name, description, post_ids) per cluster.
+
+    Posts in this window are reassigned; clusters left without posts are
+    removed (with their product specs). Clusters that keep their id keep
+    their spec.
+    """
+    window = [(pid,) for pid in window_post_ids]
+    now = to_iso(utc_now())
+    with transaction(conn):
+        conn.executemany("UPDATE analyses SET cluster_id = NULL WHERE post_id = ?", window)
+        for cluster_id, name, description, post_ids in clusters:
+            conn.execute(
+                """INSERT INTO clusters (id, name, description, updated_at) VALUES (?, ?, ?, ?)
+                   ON CONFLICT (id) DO UPDATE SET name = excluded.name,
+                       description = excluded.description, updated_at = excluded.updated_at""",
+                (cluster_id, name, description, now),
+            )
+            conn.executemany(
+                "UPDATE analyses SET cluster_id = ? WHERE post_id = ?",
+                [(cluster_id, pid) for pid in post_ids],
+            )
+        conn.execute(
+            "DELETE FROM clusters WHERE id NOT IN (SELECT DISTINCT cluster_id FROM analyses "
+            "WHERE cluster_id IS NOT NULL)"
+        )
+
+
+def list_clusters(conn: sqlite3.Connection, min_posts: int = 1) -> list[dict]:
+    """Problem groups, most repeated first, with averages for ranking."""
+    rows = conn.execute(
+        """SELECT c.id, c.name, c.description, COUNT(a.post_id) AS posts,
+                  ROUND(AVG(a.product_potential), 1) AS avg_potential,
+                  ROUND(AVG(a.opportunity_score)) AS avg_score,
+                  ROUND(AVG(a.est_hours), 1) AS avg_hours,
+                  MAX(p.posted_at) AS last_seen,
+                  (SELECT COUNT(*) FROM product_specs s WHERE s.cluster_id = c.id) AS has_spec
+           FROM clusters c
+           JOIN analyses a ON a.cluster_id = c.id
+           JOIN posts p ON p.id = a.post_id
+           GROUP BY c.id HAVING COUNT(a.post_id) >= ?
+           ORDER BY posts DESC, avg_potential DESC""",
+        (min_posts,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def cluster_posts(conn: sqlite3.Connection, cluster_id: str, limit: int = 50) -> list[dict]:
+    rows = conn.execute(
+        """SELECT p.id, p.title, p.url, p.source, p.posted_at, a.summary, a.opportunity_score,
+                  a.product_potential
+           FROM analyses a JOIN posts p ON p.id = a.post_id
+           WHERE a.cluster_id = ? ORDER BY a.opportunity_score DESC LIMIT ?""",
+        (cluster_id, limit),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def save_product_spec(conn: sqlite3.Connection, cluster_id: str, spec: dict, model: str) -> None:
+    with transaction(conn):
+        conn.execute(
+            "INSERT OR REPLACE INTO product_specs (cluster_id, spec, model, created_at) VALUES (?, ?, ?, ?)",
+            (cluster_id, json.dumps(spec), model, to_iso(utc_now())),
+        )
+
+
+def get_product_spec(conn: sqlite3.Connection, cluster_id: str) -> dict | None:
+    row = conn.execute("SELECT spec FROM product_specs WHERE cluster_id = ?", (cluster_id,)).fetchone()
+    return json.loads(row[0]) if row else None
 
 
 def distinct_sources(conn: sqlite3.Connection) -> list[str]:

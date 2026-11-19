@@ -39,6 +39,10 @@
     }
   ],
   "task_defaults": {
-    "analyze": "claude-haiku-5-5"
+    "analyze": "claude-haiku-5-5",
+    "reply": "claude-sonnet-5-5",
+    "report": "claude-sonnet-5-5",
+    "cluster": "claude-haiku-5-5",
+    "spec": "claude-sonnet-5-5"
   }
 }

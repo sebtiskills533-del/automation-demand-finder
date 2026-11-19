@@ -8,7 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from app import store
-from app.analyze import month_start
+from app.budget import month_start
 from app.config import Settings
 from app.domain import utc_now
 from app.errors import ConfigError

@@ -116,6 +116,18 @@ class ClaudeClient:
         return LLMResult(data, model.id, input_tokens, output_tokens, cost)
 
 
+    def structured_with_retry(self, *, attempts: int = 2, **kwargs) -> LLMResult[T]:
+        """`structured`, asking again (once by default) if the answer was unusable."""
+        for attempt in range(1, attempts + 1):
+            try:
+                return self.structured(**kwargs)
+            except LLMOutputError:
+                if attempt == attempts:
+                    raise
+                log.info("Retrying %s after an unusable answer", kwargs.get("task"))
+        raise AssertionError("unreachable")
+
+
 def _schema_for(output_type: type[pydantic.BaseModel]) -> dict:
     """The JSON schema Claude must follow. Range limits the API can't enforce
     are moved into descriptions by the SDK and checked by pydantic afterwards."""

@@ -15,6 +15,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app import store
+from app.budget import over_budget_message
 from app.config import Settings
 from app.contact import contact_method
 from app.domain import PLATFORM_NAMES, TOOLS, AnalysisRecord, utc_now
@@ -99,10 +100,6 @@ class AnalyzeReport:
     stopped_reason: str = ""
 
 
-def month_start(moment: datetime) -> datetime:
-    return moment.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-
-
 def build_user_text(platform: str, source: str, title: str, body: str) -> str:
     """The post wrapped in tags, shortened if very long."""
     if len(body) > MAX_BODY_CHARS_FOR_AI:
@@ -166,11 +163,9 @@ def analyze_pending(
     pending = store.posts_pending_analysis(conn, settings.max_posts_per_run, MAX_ATTEMPTS_PER_POST)
 
     for row in pending:
-        if store.spend_since(conn, month_start(now())) >= settings.monthly_budget_usd:
-            report.stopped_reason = (
-                f"Monthly AI budget of ${settings.monthly_budget_usd:.2f} reached. "
-                "Raise MONTHLY_BUDGET_USD in .env or wait until next month."
-            )
+        budget_message = over_budget_message(conn, settings, now)
+        if budget_message:
+            report.stopped_reason = budget_message
             log.warning(report.stopped_reason)
             break
         try:
@@ -199,18 +194,10 @@ def analyze_pending(
 def _analyze_one(llm: ClaudeClient, model: ModelInfo, row: sqlite3.Row) -> AnalysisRecord:
     """One post, with a single retry if the answer is unusable."""
     user_text = build_user_text(row["platform"], row["source"], row["title"], row["body"])
-    try:
-        result = _ask(llm, model, user_text)
-    except LLMOutputError:
-        log.info("Retrying %s after an unusable answer", row["id"])
-        result = _ask(llm, model, user_text)
-    return to_record(row["id"], row["platform"], result, model.id)
-
-
-def _ask(llm: ClaudeClient, model: ModelInfo, user_text: str) -> PostAnalysis:
-    return llm.structured(
+    result = llm.structured_with_retry(
         task=TASK, model=model, system=SYSTEM_PROMPT, user_text=user_text, output_type=PostAnalysis
     ).data
+    return to_record(row["id"], row["platform"], result, model.id)
 
 
 def reset_small_skipped(conn: sqlite3.Connection) -> int:

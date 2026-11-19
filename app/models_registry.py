@@ -15,7 +15,13 @@ from app import store
 from app.errors import ConfigError
 
 # Every task that calls Claude. Add new tasks (e.g. "reply") here.
-TASKS = {"analyze": "Daily post analysis"}
+TASKS = {
+    "analyze": "Daily post analysis",
+    "reply": "Draft replies",
+    "report": "Decision reports",
+    "cluster": "Grouping into top problems",
+    "spec": "Product specs",
+}
 
 _SETTING_PREFIX = "model."
 

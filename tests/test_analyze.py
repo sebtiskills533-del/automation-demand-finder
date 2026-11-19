@@ -10,9 +10,9 @@ from app.analyze import (
     PostAnalysis,
     analyze_pending,
     build_user_text,
-    month_start,
     to_record,
 )
+from app.budget import month_start
 from app.config import CONFIG_DIR
 from app.errors import LLMAuthError
 from app.llm import ClaudeClient
