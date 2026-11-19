@@ -5,7 +5,7 @@ import pytest
 
 from app.errors import ConfigError, SourceFetchError
 from app.http_client import PoliteHttpClient
-from app.sources import HackerNewsSource, RedditSource, load_sources
+from app.sources import DiscourseSource, HackerNewsSource, RedditSource, load_sources
 from tests.fakes import FakeClock, FakeResponse, FakeSession
 
 REDDIT_FEED = """<?xml version="1.0" encoding="UTF-8"?>
@@ -130,6 +130,90 @@ def test_hackernews_bad_json_raises():
 def test_hackernews_query_validation():
     with pytest.raises(ValueError):
         HackerNewsSource("   ")
+    with pytest.raises(ValueError):
+        HackerNewsSource("automate", tags="front_page")
+
+
+def test_hackernews_defaults_to_ask_hn():
+    http, session = http_with(hn_response([]))
+    source = HackerNewsSource("automate")
+    source.fetch(http)
+    assert session.calls[0][1]["tags"] == "ask_hn"
+    assert source.name == "Ask HN: automate"
+    assert HackerNewsSource("automate", tags="story").name == "Hacker News: automate"
+
+
+# ---------------------------------------------------------------- forums
+
+FORUM_FEED = """<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<channel><title>n8n Community - Latest topics</title>
+<item>
+  <title>How do I send a Slack message when a Google Sheet row is added?</title>
+  <dc:creator><![CDATA[sheet_user]]></dc:creator>
+  <category>Questions</category>
+  <description><![CDATA[<p>Every day I copy rows by hand. Mail me at me@shop.com</p>]]></description>
+  <link>https://community.n8n.io/t/how-do-i-send-a-slack-message/329470</link>
+  <pubDate>Wed, 18 Nov 2026 18:01:02 +0000</pubDate>
+  <guid isPermaLink="false">community.n8n.io-topic-329470</guid>
+</item>
+<item>
+  <title>Free template: faceless YouTube shorts</title>
+  <category>Built with n8n</category>
+  <link>https://community.n8n.io/t/free-template/329469</link>
+  <guid isPermaLink="false">community.n8n.io-topic-329469</guid>
+</item>
+<item>
+  <title>Off-site link</title>
+  <category>Questions</category>
+  <link>https://evil.example.com/t/x/1</link>
+  <guid isPermaLink="false">evil.example.com-topic-1</guid>
+</item>
+</channel></rss>"""
+
+
+def make_forum(**kwargs):
+    return DiscourseSource("n8n community", "https://community.n8n.io", ("Built with n8n",), **kwargs)
+
+
+def test_forum_parses_questions_and_skips_showcases_and_foreign_links():
+    http, session = http_with(FakeResponse(200, FORUM_FEED))
+    posts = make_forum().fetch(http)
+    assert session.calls[0][0] == "https://community.n8n.io/latest.rss"
+    assert len(posts) == 1
+    post = posts[0]
+    assert post.id == "forum_community_n8n_io_329470"
+    assert post.platform == "forum" and post.source == "n8n community"
+    assert post.author_handle == "sheet_user"
+    assert post.posted_at == datetime(2026, 11, 18, 18, 1, 2, tzinfo=timezone.utc)
+    assert "me@shop.com" not in post.body
+    assert post.body.startswith("Every day I copy rows by hand")
+
+
+def test_forum_skip_categories_ignore_case():
+    source = DiscourseSource("n8n community", "https://community.n8n.io", ("built WITH n8n", "questions"))
+    http, _ = http_with(FakeResponse(200, FORUM_FEED))
+    assert source.fetch(http) == []
+
+
+def test_forum_garbage_response_raises():
+    http, _ = http_with(FakeResponse(200, "<html>maintenance"))
+    with pytest.raises(SourceFetchError):
+        make_forum().fetch(http)
+
+
+@pytest.mark.parametrize(
+    ("name", "url"),
+    [
+        ("ok forum", "http://community.n8n.io"),
+        ("ok forum", "https://community.n8n.io/latest.rss"),
+        ("ok forum", "not a url"),
+        ("<script>", "https://community.n8n.io"),
+    ],
+)
+def test_forum_config_validation(name, url):
+    with pytest.raises(ValueError):
+        DiscourseSource(name, url)
 
 
 def test_load_sources_from_real_config():
@@ -137,7 +221,9 @@ def test_load_sources_from_real_config():
 
     sources = load_sources(CONFIG_DIR / "sources.json")
     names = [s.name for s in sources]
-    assert "r/smallbusiness" in names and "Hacker News: automate" in names
+    assert "r/smallbusiness" in names
+    assert "Ask HN: automate" in names
+    assert "n8n community" in names and "Make community" in names
 
 
 @pytest.mark.parametrize(
@@ -148,6 +234,10 @@ def test_load_sources_from_real_config():
         json.dumps({"reddit": {"subreddits": ["ok"], "posts_per_feed": 1000}}),
         json.dumps({"reddit": {"subreddits": []}}),
         json.dumps({"reddit": "oops"}),
+        json.dumps({"forums": [{"name": "No url"}]}),
+        json.dumps({"forums": [{"name": "F", "base_url": "https://f.example.com", "skip_categories": "News"}]}),
+        json.dumps({"hackernews": {"queries": ["a"], "tags": "jobs"}}),
+        json.dumps({"hackernews": {"queries": ["same", "same"]}}),
     ],
 )
 def test_load_sources_invalid_config(tmp_path, content):

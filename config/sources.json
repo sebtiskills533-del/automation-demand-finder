@@ -4,8 +4,21 @@
     "posts_per_feed": 25
   },
   "hackernews": {
-    "queries": ["automate", "automation"],
-    "lookback_hours": 48,
+    "tags": "ask_hn",
+    "queries": ["automate", "automation", "spreadsheet", "workflow"],
+    "lookback_hours": 168,
     "hits_per_query": 50
-  }
+  },
+  "forums": [
+    {
+      "name": "n8n community",
+      "base_url": "https://community.n8n.io",
+      "skip_categories": ["Built with n8n", "Tips & Tricks", "News", "Announcements"]
+    },
+    {
+      "name": "Make community",
+      "base_url": "https://community.make.com",
+      "skip_categories": ["Offer Help", "Knowledge Hub", "News", "Announcements"]
+    }
+  ]
 }

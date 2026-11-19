@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 # Where a post came from. The keys are stored in the database.
-PLATFORM_NAMES = {"reddit": "Reddit", "hackernews": "Hacker News"}
+PLATFORM_NAMES = {"reddit": "Reddit", "hackernews": "Hacker News", "forum": "the community forum"}
 
 DIFFICULTIES = ("low", "medium", "high")
 

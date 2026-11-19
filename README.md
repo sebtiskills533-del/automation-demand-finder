@@ -6,7 +6,8 @@ each request, and shows a ranked list you can tick, track and act on.
 
 **What it does every day**
 
-1. **Collect** new public posts from subreddit RSS feeds and Hacker News.
+1. **Collect** new public posts from Ask HN, the n8n and Make community forums
+   (official Discourse feeds) and subreddit feeds (Reddit needs API approval).
 2. **Filter** out posts that clearly aren't requests (a free keyword check).
 3. **Analyse** the rest with Claude. Each post gets:
    - a one-line summary, difficulty, best tool and estimated build hours
@@ -83,7 +84,7 @@ Logs from every run are in `logs/app.log`.
 | File | What it controls |
 | --- | --- |
 | `.env` | API key, password hash, `MAX_POSTS_PER_RUN`, `MONTHLY_BUDGET_USD`, `USD_TO_INR`, `REDDIT_USERNAME`, `LOG_LEVEL` |
-| `config/sources.json` | Which subreddits and Hacker News searches to read |
+| `config/sources.json` | Which subreddits, Hacker News searches (`ask_hn` or `story`) and Discourse forums to read; `skip_categories` drops showcase/news/"offer help" topics |
 | `config/phrases.txt` | Keywords that make a post count as a request |
 | `config/models.json` | The Claude models (levels 1â€“4) and their prices |
 
@@ -110,7 +111,7 @@ app/
   db.py / store.py    SQLite schema + every query (safe placeholders only)
   privacy.py          removes emails and phone numbers
   http_client.py      polite HTTP: 2 s between requests, retries, clear User-Agent
-  sources/            Reddit RSS + Hacker News readers
+  sources/            Reddit RSS, Hacker News and Discourse forum readers
   collect.py          step 1    prefilter.py  step 2    analyze.py  step 3
   llm.py              the only code that calls Claude (structured JSON, cost logging)
   models_registry.py  model levels, prices, model per task

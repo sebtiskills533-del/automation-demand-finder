@@ -92,8 +92,14 @@ def test_contact_shared_website_means_contact_form():
     assert "contact form" in contact_method("reddit", False, True)
 
 
+def test_contact_on_forums_warns_about_rules():
+    assert "rules on offering paid help" in contact_method("forum", False, False)
+    assert contact_method("forum", True, False).startswith("Direct message on the community forum")
+    assert "rules" in contact_method("forum", True, False)
+
+
 def test_contact_never_suggests_email_or_phone():
-    for platform in ("reddit", "hackernews"):
+    for platform in ("reddit", "hackernews", "forum"):
         for hire in (True, False):
             for site in (True, False):
                 text = contact_method(platform, hire, site).lower()
