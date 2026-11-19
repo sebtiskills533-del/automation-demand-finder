@@ -23,7 +23,7 @@ _END = re.compile(r"^\W*POSTS\s+END\W*$", re.IGNORECASE)
 _HEADER = re.compile(r"^\s*url\s*,\s*title\b", re.IGNORECASE)
 _ROW = re.compile(r'^\s*"?https://', re.IGNORECASE)
 _FENCE = re.compile(r"^\s*```")
-_NO_POSTS = re.compile(r"^\W*NO\s+POSTS\s+FOUND\W*$", re.IGNORECASE)
+_NO_POSTS = re.compile(r"^\W*NO\s+POSTS\s+FOUND\b\W*(?P<reason>.*)$", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -49,8 +49,11 @@ def parse_muse_reply(text: str, max_posts: int) -> MuseReply:
     if not csv_lines:
         if problem:
             raise MuseReplyError(f"Muse reported a problem: {problem[len('PROBLEM:'):].strip()}")
-        if any(_NO_POSTS.match(ln) for ln in lines):
-            return MuseReply(rows=[], note="Muse found no matching posts this time.")
+        no_posts = next((m for m in map(_NO_POSTS.match, lines) if m), None)
+        if no_posts:
+            reason = no_posts.group("reason").strip()
+            note = "Muse found no matching posts this time."
+            return MuseReply(rows=[], note=f"{note} Reason: {reason}" if reason else note)
         raise MuseReplyError(
             "Muse's reply had no posts in the expected format. Open the chat and check "
             "that the side chat has the finder procedure."

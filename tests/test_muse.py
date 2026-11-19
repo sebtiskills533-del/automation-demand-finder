@@ -406,6 +406,11 @@ def test_parse_no_posts_found():
     assert reply.rows == [] and "no matching posts" in reply.note
 
 
+def test_parse_no_posts_found_with_reason():
+    reply = parse_muse_reply("NO POSTS FOUND: searched Quora and 3 Facebook groups, only ads", 20)
+    assert reply.rows == [] and reply.note.endswith("Reason: searched Quora and 3 Facebook groups, only ads")
+
+
 def test_parse_problem_line():
     with pytest.raises(MuseReplyError, match="logged out of Facebook"):
         parse_muse_reply("PROBLEM: logged out of Facebook", 20)

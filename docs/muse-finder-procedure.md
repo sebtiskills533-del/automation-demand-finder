@@ -83,11 +83,13 @@ Format rules:
 - Put the **text in double quotes**. If the text contains a double quote, write it twice (`""`).
 - No numbering, no bullets, no commentary between the lines.
 
-If you found **nothing** that matches, reply with exactly one line:
+If you found **nothing** that matches, reply with exactly one line that also says where you looked and why nothing matched:
 
 ```
-NO POSTS FOUND
+NO POSTS FOUND: <sites you searched and why nothing matched>
 ```
+
+If you could not open the sites at all (no browser access, logged out, blocked), that is a PROBLEM, not "no posts" — use the PROBLEM line below.
 
 If something stops you (logged out of a site, a page will not load, a site blocks you), reply with exactly one line:
 
