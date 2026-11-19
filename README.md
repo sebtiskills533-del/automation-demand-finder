@@ -60,6 +60,15 @@ Then choose a dashboard password (it's stored only as a secure hash). Typing is 
 | Dashboard | `.venv\Scripts\python -m streamlit run app/dashboard.py` |
 | Tests | `.venv\Scripts\python -m pytest` |
 
+**Desktop shortcut:** run this once and you get an *Automation Demand Finder* icon on your
+desktop that starts the dashboard and opens your browser:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\create_desktop_shortcut.ps1
+```
+
+Keep the small black window open while you use the app; close it to stop.
+
 The dashboard opens at <http://localhost:8501>. It only listens on your own
 computer, not your Wi-Fi network.
 
