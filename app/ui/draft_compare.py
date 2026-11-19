@@ -1,4 +1,4 @@
-"""Two drafts side by side (one per writing style) so the user can compare and choose.
+"""Drafts side by side (one per writing style) so the user can compare and choose.
 Used for reply drafts and email drafts."""
 
 from __future__ import annotations
@@ -11,12 +11,12 @@ import streamlit as st
 
 from app import store
 from app.errors import AppError
-from app.writing import CONVINCING, STYLE_HELP, STYLE_LABELS, TIP_FIRST, get_style
+from app.writing import STYLE_HELP, STYLE_LABELS, get_style
 
 log = logging.getLogger(__name__)
 
-# The earlier style on the left, the new one on the right.
-STYLES_IN_ORDER = (TIP_FIRST, CONVINCING)
+# Oldest style on the left, newest on the right (the order of STYLE_LABELS).
+STYLES_IN_ORDER = tuple(STYLE_LABELS)
 
 
 def compare_drafts(
@@ -30,19 +30,20 @@ def compare_drafts(
     key: str,
     with_subject: bool = False,
 ) -> None:
-    """Both styles next to each other, each with draft / redraft / "use this one"."""
+    """All styles next to each other, each with draft / redraft / "use this one"."""
     drafts = store.get_drafts(conn, kind, owner_id)
     preferred = get_style(conn)
-    if st.button("✨ Draft both styles" if not drafts else "🔄 Redraft both styles",
-                 type="secondary" if drafts else "primary", key=f"both_{key}",
-                 help=f"Writes one draft in each style. Your preferred style ({STYLE_LABELS[preferred]}, "
-                      "set on the Settings page) is picked automatically; switch with 'Use this one'."):
+    if st.button("✨ Draft all styles" if not drafts else "🔄 Redraft all styles",
+                 type="secondary" if drafts else "primary", key=f"all_{key}",
+                 help=f"Writes one draft in each of the {len(STYLES_IN_ORDER)} styles (about Rs 1 each). "
+                      f"Your preferred style ({STYLE_LABELS[preferred]}, set on the Settings page) is picked "
+                      "automatically; switch with 'Use this one'."):
         # The preferred style is drafted last, so it ends up as the chosen one.
         order = sorted(STYLES_IN_ORDER, key=lambda s: s == preferred)
-        if _run(lambda: [make_draft(style) for style in order], "Claude is writing both drafts..."):
+        if _run(lambda: [make_draft(style) for style in order], "Claude is writing a draft in each style..."):
             st.rerun()
 
-    columns = st.columns(2)
+    columns = st.columns(len(STYLES_IN_ORDER))
     for column, style in zip(columns, STYLES_IN_ORDER):
         with column, st.container(border=True):
             st.markdown(f"**{STYLE_LABELS[style]}**")

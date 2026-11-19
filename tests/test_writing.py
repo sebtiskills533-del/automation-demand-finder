@@ -8,7 +8,15 @@ from app import emails, replies, reports, store
 from app.config import CONFIG_DIR
 from app.llm import ClaudeClient
 from app.models_registry import load_registry
-from app.writing import CLEAR_AND_CONVINCING, CONVINCING, TIP_FIRST, delivery_hint, get_style, set_style
+from app.writing import (
+    CLEAR_AND_CONVINCING,
+    CONVINCING,
+    QUICK_TIP,
+    TIP_FIRST,
+    delivery_hint,
+    get_style,
+    set_style,
+)
 from tests.conftest import make_analysis, make_post
 from tests.fakes import FakeAnthropic, fake_message
 
@@ -43,7 +51,7 @@ def test_reply_prompt_gets_the_delivery_time(conn, settings):
 
 
 def test_stack_exchange_rule_survives_both_styles():
-    for style in (CONVINCING, TIP_FIRST):
+    for style in (CONVINCING, TIP_FIRST, QUICK_TIP):
         assert "On Stack Exchange never offer help or services" in replies.system_prompt(style)
 
 
@@ -53,6 +61,16 @@ def test_tip_first_style_brings_back_the_earlier_wording():
     assert "Start with a genuinely useful, specific tip" in reply_prompt
     assert CLEAR_AND_CONVINCING not in reply_prompt
     assert "Refer to their actual problem" in email_prompt and CLEAR_AND_CONVINCING not in email_prompt
+
+
+def test_quick_tip_style_matches_the_first_drafts():
+    reply_prompt = replies.system_prompt(QUICK_TIP)
+    assert 'Start with "Quick tip:"' in reply_prompt
+    assert '"I build small automations like this."' in reply_prompt
+    assert "One paragraph" in reply_prompt
+    assert "end with one simple question" not in reply_prompt  # its own closing offer instead
+    assert "On Stack Exchange never offer help or services" in reply_prompt
+    assert "Here's a quick plan:" in emails.system_prompt(QUICK_TIP)
 
 
 def test_style_is_remembered_and_validated(conn):

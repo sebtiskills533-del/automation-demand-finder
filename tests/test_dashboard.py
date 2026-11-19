@@ -164,8 +164,9 @@ def test_reply_tab_drafts_with_claude_and_saves_edits(env, monkeypatch):
     from tests.fakes import FakeAnthropic, fake_message
 
     seed(env)
-    # One answer per Claude call: the earlier style is drafted first, the preferred one last.
-    answers = iter([{"reply": "Short tip: use an onFormSubmit trigger. Happy to help."},
+    # One answer per Claude call, in drafting order: quick tip, short tip, then the preferred style last.
+    answers = iter([{"reply": "Quick tip: add an onFormSubmit trigger. I build small automations like this."},
+                    {"reply": "Short tip: use an onFormSubmit trigger. Happy to help."},
                     {"reply": "Copying form answers by hand is slow. An onFormSubmit trigger fixes it."}])
 
     def fake_llm(settings, conn):
@@ -174,20 +175,21 @@ def test_reply_tab_drafts_with_claude_and_saves_edits(env, monkeypatch):
 
     monkeypatch.setattr(opportunities, "build_llm", fake_llm)
     at = login()
-    at = _click(at, "✨ Draft both styles")
+    at = _click(at, "✨ Draft all styles")
     assert not at.exception
     shown = [c.value for c in at.code]
-    assert any(v.startswith("Short tip") for v in shown) and any(v.startswith("Copying form") for v in shown)
+    for start in ("Quick tip", "Short tip", "Copying form"):
+        assert any(v.startswith(start) for v in shown), start
     box = _by_label(at.text_area, "Your reply")
     assert box.value.startswith("Copying form")  # the preferred (default) style is chosen
 
-    at = _click(at, "✅ Use this one")  # switch to the other draft
-    assert _by_label(at.text_area, "Your reply").value.startswith("Short tip")
+    at = _click(at, "✅ Use this one")  # the first one: the quick-tip draft (left column)
+    assert _by_label(at.text_area, "Your reply").value.startswith("Quick tip")
     _by_label(at.text_area, "Your reply").input("My own edited reply.")
     at = _click(at, "💾 Save edits")
     with db.open_db(env) as conn:
         assert store.get_post_details(conn, "reddit_0")["reply_draft"] == "My own edited reply."
-        assert set(store.get_drafts(conn, "reply", "reddit_0")) == {"tip_first", "convincing"}
+        assert set(store.get_drafts(conn, "reply", "reddit_0")) == {"quick_tip", "tip_first", "convincing"}
 
 
 def test_report_tab_asks_to_tick_first_then_shows_report(env, monkeypatch):
@@ -218,7 +220,7 @@ def test_report_tab_asks_to_tick_first_then_shows_report(env, monkeypatch):
 def test_ai_errors_are_shown_not_crashed(env):
     seed(env)
     at = login()  # no ANTHROPIC_API_KEY in the test environment
-    at = _click(at, "✨ Draft both styles")
+    at = _click(at, "✨ Draft all styles")
     assert not at.exception
     assert any("ANTHROPIC_API_KEY" in e.value for e in at.error)
 
@@ -438,8 +440,9 @@ def test_reply_tab_shows_both_styles_side_by_side(env):
     at = login()
     assert not at.exception
     text = all_text(at)
-    assert "**💡 Short tip first**" in text and "**✨ Clear & convincing**" in text
-    assert sum(b.label == "✨ Draft this style" for b in at.button) == 2
+    for label in ("**🛠️ Quick tip (detailed how-to)**", "**💡 Short tip first**", "**✨ Clear & convincing**"):
+        assert label in text
+    assert sum(b.label == "✨ Draft this style" for b in at.button) == 3
 
 
 # ---------------------------------------------------------------- replies
@@ -490,12 +493,12 @@ def test_replies_page_drafts_email_and_offers_mailto(env, monkeypatch):
 
     monkeypatch.setattr(reply_widgets, "build_llm", fake_llm)
     at = AppTest.from_function(_replies_page_app, default_timeout=TIMEOUT).run()
-    at = _click(at, "✨ Draft both styles")
+    at = _click(at, "✨ Draft all styles")
     assert not at.exception
     assert _by_label(at.text_input, "Subject").value == EMAIL["subject"]
     with db.open_db(env) as conn:
         reply_id = store.list_replies(conn)[0]["id"]
-        assert set(store.get_drafts(conn, "email", str(reply_id))) == {"tip_first", "convincing"}
+        assert set(store.get_drafts(conn, "email", str(reply_id))) == {"quick_tip", "tip_first", "convincing"}
     mail = next(b for b in at.get("link_button") if b.label.startswith("📧 Open in my email app"))
     assert mail.proto.url.startswith("mailto:sara@example.com?subject=")
 

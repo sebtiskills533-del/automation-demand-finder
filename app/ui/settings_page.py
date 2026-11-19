@@ -32,8 +32,8 @@ def render(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry
     st.write("")
     with st.container(border=True):
         st.markdown("#### ✍️ Preferred writing style")
-        st.caption("Replies and emails are drafted in both styles side by side so you can choose. "
-                   "This style is picked automatically when you click 'Draft both styles'.")
+        st.caption("Replies and emails are drafted in every style side by side so you can choose. "
+                   "This style is picked automatically when you click 'Draft all styles'.")
         writing_style_picker(conn, "settings")
     st.write("")
     _model_table(registry)

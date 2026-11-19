@@ -14,7 +14,7 @@ from app.config import Settings
 from app.llm import ClaudeClient
 from app.models_registry import ModelRegistry
 from app.privacy import strip_contact_details
-from app.writing import DEFAULT_STYLE, delivery_hint, get_style, style_rules
+from app.writing import DEFAULT_STYLE, delivery_hint, get_style, reply_format_rules, style_rules
 
 TASK = "reply"
 MAX_WORDS = 120
@@ -42,8 +42,7 @@ def system_prompt(style: str = DEFAULT_STYLE) -> str:
 {style_rules(style, "reply")}
 
 Reply rules:
-- Aim for 80-{MAX_WORDS} words (never more), plain text, 2-4 short paragraphs. No headings, no markdown, no bullet lists.
-- If the contact method is a direct message, this text IS that message: never ask them to message you; end with one simple question that is easy to answer (e.g. "Which email tool do you use now?").
+{reply_format_rules(style, MAX_WORDS)}
 - The tip must be genuinely useful and specific (the exact setting, formula, trigger or steps), explained in plain words.
 - Follow the allowed contact method you are given. On Stack Exchange never offer help or services (answer only). On community forums keep the offer to one soft sentence.
 - No links, no email addresses, no phone numbers, no prices, no "DM me" unless the contact method is a direct message.

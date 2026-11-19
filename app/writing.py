@@ -15,11 +15,18 @@ from app.timeline import delivery_label
 
 CONVINCING = "convincing"
 TIP_FIRST = "tip_first"
+QUICK_TIP = "quick_tip"
 DEFAULT_STYLE = CONVINCING
-STYLE_LABELS = {CONVINCING: "✨ Clear & convincing", TIP_FIRST: "💡 Short tip first"}
+STYLE_LABELS = {
+    QUICK_TIP: "🛠️ Quick tip (detailed how-to)",
+    TIP_FIRST: "💡 Short tip first",
+    CONVINCING: "✨ Clear & convincing",
+}
 STYLE_HELP = {
+    QUICK_TIP: "The first style: 'Quick tip:' with exact steps, tools and numbers, then "
+               "'I build small automations like this' and an offer to share how you'd set it up.",
+    TIP_FIRST: "Straight to a useful tip, then one short line offering help.",
     CONVINCING: "Restates their problem, explains it simply, gives a tip, the benefit and a clear next step.",
-    TIP_FIRST: "The earlier style: straight to a useful tip, then one short line offering help.",
 }
 _SETTING_KEY = "writing.style"
 
@@ -48,11 +55,42 @@ _TIP_FIRST_EMAIL = """How to write it:
 written plan. Be helpful, not salesy."""
 
 
+_QUICK_TIP_REPLY = """How to write it (one practical paragraph, about 90-130 words):
+- Start with "Quick tip:" and give a concrete, step-by-step how-to in the order they should do it: \
+the exact tools, settings and numbers (e.g. which checker to use, which Google Sheet columns to \
+add, which Make or n8n trigger pulls the rows, when the sequence should stop).
+- Then end with the sentence "I build small automations like this." and ONE short offer, for \
+example "Feel free to DM me and I can share how I'd set it up for your case." (On Stack Exchange \
+leave out both of these sentences.)"""
+
+_QUICK_TIP_EMAIL = """How to write it:
+- After the greeting, write "Here's a quick plan:" and give the exact steps in order, with the \
+tools, settings and numbers that fit their case.
+- Then one sentence saying you build small automations like this, and offer to set it up or walk \
+them through how you'd do it for their case."""
+
+
 def style_rules(style: str, kind: Literal["reply", "email"]) -> str:
     """The writing rules to put in a prompt for this style and kind of draft."""
     if style == TIP_FIRST:
         return _TIP_FIRST_EMAIL if kind == "email" else _TIP_FIRST_REPLY
+    if style == QUICK_TIP:
+        return _QUICK_TIP_EMAIL if kind == "email" else _QUICK_TIP_REPLY
     return CLEAR_AND_CONVINCING
+
+
+def reply_format_rules(style: str, max_words: int) -> str:
+    """Length / closing rules for replies. The quick-tip style keeps its own one-paragraph
+    shape and its 'DM me' offer, exactly as the first drafts were written."""
+    if style == QUICK_TIP:
+        return ("- One paragraph, plain text, no more than 130 words. No headings, no markdown, no lists.\n"
+                "- Invite them to DM you only if the contact method is a direct message; otherwise make "
+                "the offer \"Happy to share how I'd set it up for your case.\"")
+    return (f"- Aim for 80-{max_words} words (never more), plain text, 2-4 short paragraphs. No headings, no "
+            "markdown, no bullet lists.\n"
+            "- If the contact method is a direct message, this text IS that message: never ask them to "
+            "message you; end with one simple question that is easy to answer (e.g. \"Which email tool "
+            "do you use now?\").")
 
 
 def get_style(conn: sqlite3.Connection) -> str:

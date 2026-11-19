@@ -226,7 +226,7 @@ def _overview(post: dict) -> None:
 
 def _reply_tab(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry, post: dict) -> None:
     model = registry.model_for_task(conn, "reply")
-    st.caption(f"Claude writes the reply in two styles so you can compare and pick one. You edit it and "
+    st.caption(f"Claude writes the reply in each style so you can compare and pick one. You edit it and "
                f"post it yourself — nothing is ever posted for you. Uses {model.name}.")
     compare_drafts(
         conn, kind="reply", owner_id=post["id"], chosen_body=post["reply_draft"], key=f"reply_{post['id']}",

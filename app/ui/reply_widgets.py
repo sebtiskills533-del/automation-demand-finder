@@ -43,7 +43,7 @@ def _email_section(conn: sqlite3.Connection, settings: Settings, registry: Model
     st.caption("✉️ Email they shared with you")
     st.code(reply["email"], language=None)
     model = registry.model_for_task(conn, "email")
-    st.caption(f"Claude writes the email in two styles so you can compare and pick one. Uses {model.name}. "
+    st.caption(f"Claude writes the email in each style so you can compare and pick one. Uses {model.name}. "
                "You review it and send it yourself.")
     compare_drafts(
         conn, kind="email", owner_id=str(reply["id"]), chosen_body=reply["email_body"],
