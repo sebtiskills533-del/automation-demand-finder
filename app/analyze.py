@@ -22,7 +22,7 @@ from app.errors import LLMOutputError, LLMTemporaryError
 from app.llm import ClaudeClient
 from app.models_registry import ModelInfo, ModelRegistry
 from app.scoring import opportunity_score
-from app.timeline import MEDIUM_MAX_HOURS, delivery_window
+from app.timeline import MEDIUM_MAX_HOURS, delivery_window, is_too_big
 
 log = logging.getLogger(__name__)
 
@@ -62,8 +62,16 @@ Field rules:
 - difficulty: low = one tool, simple trigger (e.g. form -> sheet). medium = Apps Script or \
 joining 2-3 tools. high = full apps, AI agents, payments, medical/financial/sensitive data, or \
 anything over {MEDIUM_MAX_HOURS} hours.
-- buildable: true only for low or medium jobs a beginner using Claude Code can finish in \
-under {MEDIUM_MAX_HOURS} hours. Payments, medical data or full apps are never buildable.
+- What counts as a job: someone wants an automation built, OR wants help fixing, debugging, \
+finishing or improving their own automation/workflow/spreadsheet/script (for example "my n8n \
+loop outputs duplicates", "my Make scenario creates double rows"). A fix is a real, sellable job: \
+usually low difficulty and 1-3 hours. NOT a job: news, showcases, people sharing or selling their \
+own tool or template, opinion discussions, and problems only the vendor can solve (outages, \
+account or billing access, feature requests to the vendor).
+- buildable: true for low or medium jobs (including fixes) a beginner using Claude Code can \
+finish in under {MEDIUM_MAX_HOURS} hours. False if it is not a job, or if it involves payments, \
+medical data or full apps.
+- est_hours: for something that is not a job, use 0.
 - tool: the single best fit from the allowed list.
 - product_potential (1-5): how many other people likely have the same problem, so one \
 template could be sold many times.
@@ -108,9 +116,7 @@ def build_user_text(platform: str, source: str, title: str, body: str) -> str:
 def to_record(post_id: str, platform: str, result: PostAnalysis, model_id: str) -> AnalysisRecord:
     """Combine Claude's verdict with the app's own fixed rules."""
     # Enforce the rules in code too; never rely on the AI alone.
-    buildable = (
-        result.buildable and result.difficulty != "high" and result.est_hours <= MEDIUM_MAX_HOURS
-    )
+    buildable = result.buildable and not is_too_big(result.difficulty, result.est_hours)
     window = delivery_window(result.est_hours, result.difficulty, buildable)
     region = result.region_hint.strip()[:60] or "Unknown"
     return AnalysisRecord(
@@ -207,10 +213,27 @@ def _ask(llm: ClaudeClient, model: ModelInfo, user_text: str) -> PostAnalysis:
     ).data
 
 
-def main() -> int:
+def reset_small_skipped(conn: sqlite3.Connection) -> int:
+    """Queue small posts that were judged 'not a job' for a fresh rating
+    (useful after the rating rules improve). Returns how many were queued."""
+    return store.delete_analyses(conn, store.small_skipped_post_ids(conn, MEDIUM_MAX_HOURS))
+
+
+def main(argv: list[str] | None = None) -> int:
+    import sys
+
     from app.cli import open_runtime
 
+    args = sys.argv[1:] if argv is None else argv
+    unknown = [a for a in args if a != "--rerate-skipped"]
+    if unknown:
+        print("Usage: python -m app.analyze [--rerate-skipped]")
+        return 2
+
     with open_runtime(need_llm=True) as runtime:
+        if "--rerate-skipped" in args:
+            queued = reset_small_skipped(runtime.conn)
+            print(f"Re-rating {queued} small posts that were skipped as 'not a job'.")
         report = analyze_pending(runtime.conn, runtime.llm, runtime.registry, runtime.settings)
     print(
         f"Analysed {report.analyzed}, skipped {report.failed}. "

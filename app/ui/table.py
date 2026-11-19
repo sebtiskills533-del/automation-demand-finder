@@ -33,7 +33,9 @@ def build_table(rows: Sequence[Mapping]) -> pd.DataFrame:
             "Verdict": opportunity_label(r["opportunity_score"]),
             "Score": r["opportunity_score"],
             "Seriousness": stars(r["seriousness"]),
-            "Delivery": delivery_label(r["delivery_min_days"], r["delivery_max_days"]),
+            "Delivery": delivery_label(
+                r["delivery_min_days"], r["delivery_max_days"], r["difficulty"], r["est_hours"]
+            ),
             "Hours": r["est_hours"],
             "Difficulty": r["difficulty"],
             "Tool": r["tool"],

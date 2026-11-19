@@ -28,15 +28,30 @@ def delivery_window(est_hours: float, difficulty: str, buildable: bool) -> Deliv
     """How many days to promise, or None when the job should be skipped."""
     if est_hours < 0:
         raise ValueError("est_hours cannot be negative")
-    if not buildable or difficulty == "high" or est_hours > MEDIUM_MAX_HOURS:
+    if not buildable or is_too_big(difficulty, est_hours):
         return None
     if est_hours <= EASY_MAX_HOURS:
         return DeliveryWindow(1, 3)
     return DeliveryWindow(3, 7)
 
 
-def delivery_label(min_days: int | None, max_days: int | None) -> str:
-    """Text for stored values; None means the job is too big to promise."""
-    if min_days is None or max_days is None:
-        return "Skip - too big"
-    return DeliveryWindow(min_days, max_days).label
+TOO_BIG = "Skip - too big"
+NOT_A_JOB = "Skip - not a job"
+
+
+def is_too_big(difficulty: str, est_hours: float) -> bool:
+    return difficulty == "high" or est_hours > MEDIUM_MAX_HOURS
+
+
+def delivery_label(
+    min_days: int | None, max_days: int | None, difficulty: str, est_hours: float
+) -> str:
+    """Days to promise, or why there is no promise.
+
+    A small job with no delivery window was skipped because it isn't a job
+    for a freelancer (news, a showcase, a vendor-only problem), not because
+    it is big, so it must not say "too big".
+    """
+    if min_days is not None and max_days is not None:
+        return DeliveryWindow(min_days, max_days).label
+    return TOO_BIG if is_too_big(difficulty, est_hours) else NOT_A_JOB

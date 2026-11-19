@@ -149,7 +149,8 @@ def _details(rows: list[dict]) -> None:
     c1.metric("Verdict", opportunity_label(r["opportunity_score"]), f"score {r['opportunity_score']}",
               delta_color="off")
     c2.metric("Seriousness", stars(r["seriousness"]))
-    c3.metric("Delivery", delivery_label(r["delivery_min_days"], r["delivery_max_days"]),
+    c3.metric("Delivery", delivery_label(r["delivery_min_days"], r["delivery_max_days"],
+                                         r["difficulty"], r["est_hours"]),
               f"{r['est_hours']:g} build hours", delta_color="off")
     c4.metric("Difficulty", r["difficulty"].capitalize(), r["tool"], delta_color="off")
 

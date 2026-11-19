@@ -15,9 +15,14 @@ def test_stars():
 
 
 def test_build_table():
-    table = build_table([ROW, {**ROW, "id": "reddit_2", "status": "Building", "delivery_min_days": None,
-                               "delivery_max_days": None, "opportunity_score": 20}])
-    assert list(table.index) == ["reddit_1", "reddit_2"]
+    no_window = {"delivery_min_days": None, "delivery_max_days": None, "opportunity_score": 20}
+    table = build_table([
+        ROW,
+        {**ROW, **no_window, "id": "reddit_2", "status": "Building", "difficulty": "high", "est_hours": 40},
+        {**ROW, **no_window, "id": "reddit_3"},  # small, but judged "not a job"
+    ])
+    assert table.loc["reddit_3"]["Delivery"] == "Skip - not a job"
+    assert list(table.index) == ["reddit_1", "reddit_2", "reddit_3"]
     first = table.loc["reddit_1"]
     assert first["Verdict"] == "Work on this"
     assert first["Delivery"] == "1-3 days"

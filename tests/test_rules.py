@@ -71,8 +71,15 @@ def test_delivery_window_rejects_negative_hours():
 
 
 def test_delivery_label():
-    assert delivery_label(1, 3) == "1-3 days"
-    assert delivery_label(None, None) == "Skip - too big"
+    assert delivery_label(1, 3, "low", 2) == "1-3 days"
+    assert delivery_label(None, None, "high", 3) == "Skip - too big"
+    assert delivery_label(None, None, "medium", 25) == "Skip - too big"
+
+
+def test_small_unbuildable_job_is_not_called_too_big():
+    # Regression: a 1-hour 'low' post skipped as "not a job" showed "Skip - too big".
+    assert delivery_label(None, None, "low", 1) == "Skip - not a job"
+    assert delivery_label(None, None, "medium", 6) == "Skip - not a job"
 
 
 # ---------------------------------------------------------------- contact

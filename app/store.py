@@ -138,6 +138,28 @@ def save_analysis(conn: sqlite3.Connection, record: AnalysisRecord) -> None:
         )
 
 
+def small_skipped_post_ids(conn: sqlite3.Connection, max_hours: float) -> list[str]:
+    """Posts rated low/medium and small, yet not buildable (i.e. judged 'not a job')."""
+    return [
+        r[0]
+        for r in conn.execute(
+            """SELECT post_id FROM analyses
+               WHERE buildable = 0 AND difficulty IN ('low', 'medium') AND est_hours <= ?""",
+            (max_hours,),
+        )
+    ]
+
+
+def delete_analyses(conn: sqlite3.Connection, post_ids: Iterable[str]) -> int:
+    """Remove analyses so those posts are rated again on the next run.
+    The posts themselves and the user's ticks/notes are kept."""
+    ids = [(pid,) for pid in post_ids]
+    with transaction(conn):
+        conn.executemany("DELETE FROM analyses WHERE post_id = ?", ids)
+        conn.executemany("UPDATE posts SET analysis_attempts = 0 WHERE id = ?", ids)
+    return len(ids)
+
+
 # -------------------------------------------------------------- actions
 
 _ACTION_FIELDS = ("status", "path", "notes")

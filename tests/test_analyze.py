@@ -169,6 +169,41 @@ def test_analyze_bad_api_key_stops_the_run(conn, settings, registry):
         analyze_pending(conn, llm, registry, settings)
 
 
+def test_prompt_counts_fixes_as_jobs():
+    from app.analyze import SYSTEM_PROMPT
+
+    assert "fixing, debugging" in SYSTEM_PROMPT
+    assert "problems only the vendor can solve" in SYSTEM_PROMPT
+
+
+def test_reset_small_skipped_requeues_only_small_not_a_job_posts(conn, settings, registry):
+    from app.analyze import reset_small_skipped
+    from tests.conftest import make_analysis
+
+    for pid in ("reddit_small", "reddit_big", "reddit_good"):
+        store.save_post(conn, make_post(pid))
+    store.set_filter_results(conn, [(p, True) for p in ("reddit_small", "reddit_big", "reddit_good")])
+    store.save_analysis(conn, make_analysis("reddit_small", buildable=False, difficulty="low", est_hours=1))
+    store.save_analysis(conn, make_analysis("reddit_big", buildable=False, difficulty="high", est_hours=40))
+    store.save_analysis(conn, make_analysis("reddit_good"))
+    store.update_action(conn, "reddit_small", notes="keep me")
+    store.record_analysis_failure(conn, "reddit_small")
+
+    assert reset_small_skipped(conn) == 1
+    pending = store.posts_pending_analysis(conn, 10, MAX_ATTEMPTS_PER_POST)
+    assert [r["id"] for r in pending] == ["reddit_small"]
+    assert conn.execute("SELECT notes FROM actions").fetchone()[0] == "keep me"  # user data kept
+
+    llm, _ = make_llm(conn, fake_message(GOOD))
+    assert analyze_pending(conn, llm, registry, settings).analyzed == 1
+
+
+def test_analyze_cli_rejects_unknown_options(capsys):
+    from app.analyze import main
+
+    assert main(["--everything"]) == 2
+
+
 def test_analyze_with_nothing_pending(conn, settings, registry):
     llm, fake = make_llm(conn)
     report = analyze_pending(conn, llm, registry, settings)
