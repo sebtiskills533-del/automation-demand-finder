@@ -18,7 +18,8 @@ password-protected Streamlit dashboard on the user's own computer.
 - Secrets live in `.env` only (never in code, never committed).
 - All SQL uses `?` placeholders. Never format user input into SQL.
 - Never render post text as HTML or Markdown in the dashboard (XSS):
-  use `st.text`, dataframes or `st.code`.
+  use `st.text`, dataframes or `st.code`, or `components.md_escape` when it
+  must sit inside Markdown (titles, bullet lists, captions).
 
 ## Layout
 
@@ -45,11 +46,18 @@ app/
   scoring.py          opportunity score + label
   timeline.py         delivery-time rules
   contact.py          allowed contact method rules
-  pipeline.py         collect -> filter -> analyze
+  pipeline.py         collect -> filter -> analyze -> group (clusters)
+  budget.py           monthly AI budget check shared by every Claude feature
+  replies.py          v1.1 draft replies (saved to actions.reply_draft)
+  reports.py          v1.1 Decision Reports (ticked posts only; app rules win)
+  clusters.py         v1.1 top problems (numbered lines in, numbers out)
+  specs.py            v1.2 product specs per problem group
   auth.py             password hashing + login lockout
   set_password.py     CLI to set the dashboard password
   dashboard.py        Streamlit entry point
-  ui/                 dashboard pages and widgets
+  ui/                 dashboard pages (opportunities, problems_page, import_page,
+                      settings_page), components.py (badges, md_escape), assets/
+                      Theme: .streamlit/config.toml (teal + amber).
 config/               sources.json, phrases.txt, models.json (user-editable)
 run_daily.py          the daily run
 tests/                pytest suite (no network, no real API calls)

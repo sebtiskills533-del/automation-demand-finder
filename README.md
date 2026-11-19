@@ -20,6 +20,11 @@ each request, and shows a ranked list you can tick, track and act on.
    - the **allowed contact method** (public reply, a DM only if they asked to hire, and so on)
    - the region, **only if the post states it**
 4. **Review** everything in a password-protected dashboard, with a link to every original post.
+5. **Act faster (version 1.1):** for any post, Claude can **draft a reply** (a free tip
+   first, you edit and post it yourself); for posts you tick, a **Decision Report**
+   (do it / think first / skip, an A-to-Z plan, delivery days, how to contact them
+   and a ready draft). Similar requests are grouped into **Top problems**, and for
+   any problem Claude can write a **product spec** for a sellable Google Sheets template.
 
 Nothing is ever posted or sent automatically, and emails and phone numbers are
 removed before anything is saved.
@@ -90,6 +95,18 @@ Demand Finder* → right-click → **Run**. To remove it:
 `Unregister-ScheduledTask -TaskName "Automation Demand Finder"`.
 
 Logs from every run are in `logs/app.log`.
+
+## Using the dashboard
+
+| Page | What you do there |
+| --- | --- |
+| 🎯 **Opportunities** | Pick a view (⭐ Best leads, 🛠️ In progress, 📋 All…), click a post, then use the tabs: **Overview**, **✍️ Reply** (draft with Claude, edit, copy), **📋 Decision report** (after you tick it), **🗂️ Track** (status, path, notes) |
+| 🧩 **Top problems** | See requests that repeat, open one to see its posts, and click **📝 Write product spec** (download it for Claude Code) |
+| 📥 **Import posts** | Add posts you found yourself, rate them, or start a Muse collection |
+| ⚙️ **Settings & costs** | This month's AI spending and which Claude model does each job |
+
+Colours: 🟢 *Work on this* (score 70+), 🟠 *Worth a look* (45+), ⚪ *Skip*.
+Nothing is ever posted for you: copy a draft and post it yourself.
 
 ## 4. Settings you can change
 

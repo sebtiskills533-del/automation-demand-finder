@@ -47,6 +47,14 @@ def all_text(at: AppTest) -> str:
     return "\n".join(str(p) for p in parts)
 
 
+def on_page(at: AppTest, title: str) -> bool:
+    return any(title in t.value for t in at.title)
+
+
+def metric(at: AppTest, label_part: str):
+    return next(m for m in at.metric if label_part in m.label)
+
+
 def test_missing_password_hash_blocks_dashboard(env, monkeypatch):
     monkeypatch.setenv("DASHBOARD_PASSWORD_HASH", "")
     at = AppTest.from_file(DASHBOARD, default_timeout=TIMEOUT).run()
@@ -73,20 +81,20 @@ def test_new_password_works_without_restarting_dashboard(env, tmp_path, monkeypa
     monkeypatch.delenv("DASHBOARD_PASSWORD_HASH")  # read it from the .env file instead
 
     env_file.write_text(f"DASHBOARD_PASSWORD_HASH={hash_password('old password 123', n=2**10)}\n")
-    assert any(t.value == "Opportunities" for t in login("old password 123").title)
+    assert on_page(login("old password 123"), "Opportunities")
 
     env_file.write_text(f"DASHBOARD_PASSWORD_HASH={hash_password('new password 456', n=2**10)}\n")
     later = env_file.stat().st_mtime + 5
     os.utime(env_file, (later, later))  # make sure the change is visible on any file system
 
     assert "Wrong password" in all_text(login("old password 123"))
-    assert any(t.value == "Opportunities" for t in login("new password 456").title)
+    assert on_page(login("new password 456"), "Opportunities")
 
 
 def test_wrong_password(env):
     at = login("not the password")
     assert "Wrong password" in all_text(at)
-    assert not any(t.value == "Opportunities" for t in at.title)
+    assert not on_page(at, "Opportunities")
 
 
 def test_lockout_after_repeated_failures(env):
@@ -99,25 +107,152 @@ def test_lockout_after_repeated_failures(env):
 def test_login_shows_empty_state(env):
     at = login()
     assert not at.exception
-    assert any(t.value == "Opportunities" for t in at.title)
-    assert "No analysed posts match" in all_text(at)
+    assert on_page(at, "Opportunities")
+    assert "Nothing here yet" in all_text(at)
 
 
-def test_login_shows_ranked_table_and_details(env):
-    seed(env)
+def test_login_shows_summary_table_and_details(env):
+    seed(env)  # scores 90, 60, 30
     at = login()
     assert not at.exception
-    assert any(m.label == "Analysed by Claude" and m.value == "3" for m in at.metric)
+    assert metric(at, "Best leads").value == "2"
     assert "Automate thing 0" in all_text(at)  # details panel shows the top post
     assert any(b.label.startswith("Open the original post") for b in at.get("link_button"))
+    assert len(at.dataframe) == 1
 
 
-def test_filters_narrow_results(env):
+def test_stranger_text_cannot_become_links_or_images(env):
+    from app.importer import import_rows
+
+    with db.open_db(env) as conn:
+        import_rows(conn, [{"url": "https://www.quora.com/q1",
+                            "title": "Help ![pixel](https://tracker.example/p.png)",
+                            "source": "[click me](https://evil.example)"}])
+        post_id = conn.execute("SELECT id FROM posts").fetchone()[0]
+        store.save_analysis(conn, make_analysis(post_id, opportunity_score=90))
+    at = login()
+    assert not at.exception
+    rendered = " ".join(m.value for m in (*at.markdown, *at.caption))
+    assert "](https://tracker.example" not in rendered and "](https://evil.example" not in rendered
+    assert "\\[click me\\]" in rendered  # shown literally, escaped
+
+
+def test_quick_views_and_filters(env):
     seed(env)
     at = login()
-    at.slider[0].set_value(50).run()  # minimum opportunity score
+    assert "2 posts" in all_text(at)  # default view: best leads (score 45+)
+    at.segmented_control(key="quick_view").set_value("📋 All").run()
+    assert not at.exception and "3 posts" in all_text(at)
+    _by_label(at.slider, "Minimum score").set_value(50).run()
+    assert "2 posts" in all_text(at)
+    at.text_input[0].input("thing 2").run()  # search box
+    assert "Nothing here yet" in all_text(at)
+
+
+def test_track_tab_changes_status(env):
+    seed(env)
+    at = login()
+    at.segmented_control(key="status_reddit_0").set_value("Ticked").run()
     assert not at.exception
-    assert "2 matching posts" in all_text(at)
+    with db.open_db(env) as conn:
+        assert store.get_post_details(conn, "reddit_0")["status"] == "Ticked"
+
+
+def test_reply_tab_drafts_with_claude_and_saves_edits(env, monkeypatch):
+    from app.llm import ClaudeClient
+    from app.ui import opportunities
+    from tests.fakes import FakeAnthropic, fake_message
+
+    seed(env)
+    reply = {"reply": "Use an onFormSubmit trigger to append the row. Happy to help if you get stuck."}
+
+    def fake_llm(settings, conn):
+        sink = lambda t, m, i, o, c: store.log_usage(conn, t, m, i, o, c)  # noqa: E731
+        return ClaudeClient("key", sink, client=FakeAnthropic(fake_message(reply)))
+
+    monkeypatch.setattr(opportunities, "build_llm", fake_llm)
+    at = login()
+    at = _click(at, "✨ Draft a reply with Claude")
+    assert not at.exception
+    box = at.text_area(key="reply_reddit_0")
+    assert box.value.startswith("Use an onFormSubmit trigger")
+    box.input("My own edited reply.")
+    at = _click(at, "💾 Save edits")
+    with db.open_db(env) as conn:
+        assert store.get_post_details(conn, "reddit_0")["reply_draft"] == "My own edited reply."
+
+
+def test_report_tab_asks_to_tick_first_then_shows_report(env, monkeypatch):
+    from app.llm import ClaudeClient
+    from app.ui import opportunities
+    from tests.fakes import FakeAnthropic, fake_message
+    from tests.test_v11 import REPORT
+
+    seed(env)
+    at = login()
+    assert any("Tick this post first" in i.value for i in at.info)
+
+    with db.open_db(env) as conn:
+        store.update_action(conn, "reddit_0", status="Ticked")
+
+    def fake_llm(settings, conn):
+        sink = lambda t, m, i, o, c: store.log_usage(conn, t, m, i, o, c)  # noqa: E731
+        return ClaudeClient("key", sink, client=FakeAnthropic(fake_message(REPORT)))
+
+    monkeypatch.setattr(opportunities, "build_llm", fake_llm)
+    at = login()
+    at = _click(at, "📋 Make Decision Report")
+    assert not at.exception
+    assert metric(at, "Build + test").value == "3.5 h"
+    assert any("Tip: use an onFormSubmit trigger" in c.value for c in at.code)
+
+
+def test_ai_errors_are_shown_not_crashed(env):
+    seed(env)
+    at = login()  # no ANTHROPIC_API_KEY in the test environment
+    at = _click(at, "✨ Draft a reply with Claude")
+    assert not at.exception
+    assert any("ANTHROPIC_API_KEY" in e.value for e in at.error)
+
+
+def _problems_page_app():
+    from app import db
+    from app.config import load_settings
+    from app.models_registry import load_registry
+    from app.ui import problems_page
+
+    settings = load_settings()
+    with db.open_db(settings.db_path) as conn:
+        problems_page.render(conn, settings, load_registry(settings.models_file))
+
+
+def test_problems_page_empty_then_groups_and_spec(env, monkeypatch):
+    from app.llm import ClaudeClient
+    from app.ui import problems_page
+    from tests.fakes import FakeAnthropic, fake_message
+    from tests.test_v11 import SPEC
+
+    at = AppTest.from_function(_problems_page_app, default_timeout=TIMEOUT).run()
+    assert not at.exception and "No repeated problems yet" in all_text(at)
+
+    seed(env)
+    with db.open_db(env) as conn:
+        store.replace_clusters(conn, [("etsy-orders", "Etsy orders to sheet", "Copy orders",
+                                       ["reddit_0", "reddit_1"])], ["reddit_0", "reddit_1"])
+
+    def fake_llm(settings, conn):
+        sink = lambda t, m, i, o, c: store.log_usage(conn, t, m, i, o, c)  # noqa: E731
+        return ClaudeClient("key", sink, client=FakeAnthropic(fake_message(SPEC)))
+
+    monkeypatch.setattr(problems_page, "build_llm", fake_llm)
+    at = AppTest.from_function(_problems_page_app, default_timeout=TIMEOUT).run()
+    assert not at.exception
+    assert "Etsy orders to sheet" in all_text(at)
+    at = _click(at, "📝 Write product spec")
+    assert not at.exception
+    assert any("Etsy Order Tracker Google Sheets Template" in c.value for c in at.code)
+    with db.open_db(env) as conn:
+        assert store.get_product_spec(conn, "etsy-orders")["product_name"] == "Etsy Order Tracker"
 
 
 def _settings_page_app():
@@ -258,7 +393,7 @@ def test_settings_page_lists_all_models_and_saves_choice(env):
         store.log_usage(conn, "analyze", "claude-haiku-5-5", 1000, 200, 0.0002)
     at = AppTest.from_function(_settings_page_app, default_timeout=TIMEOUT).run()
     assert not at.exception
-    assert any(t.value == "Settings & costs" for t in at.title)
+    assert on_page(at, "Settings & costs")
     assert len(at.dataframe) == 2  # usage this month + the model list
     models_table = at.dataframe[1].value
     assert list(models_table["Level"]) == [1, 2, 3, 4]

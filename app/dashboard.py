@@ -21,8 +21,9 @@ from app.config import Settings, load_settings  # noqa: E402
 from app.errors import AppError  # noqa: E402
 from app.logging_setup import setup_logging  # noqa: E402
 from app.models_registry import ModelRegistry, load_registry  # noqa: E402
-from app.ui import import_page, opportunities, settings_page  # noqa: E402
-from app.ui.login import require_login  # noqa: E402
+from app.ui import import_page, opportunities, problems_page, settings_page  # noqa: E402
+from app.ui.components import apply_page_style  # noqa: E402
+from app.ui.login import logout_button, require_login  # noqa: E402
 
 
 def _config_version() -> tuple[float, float]:
@@ -47,6 +48,7 @@ def _load_config(version: tuple[float, float]) -> tuple[Settings, ModelRegistry]
 
 def main() -> None:
     st.set_page_config(page_title="Automation Demand Finder", page_icon="🔎", layout="wide")
+    apply_page_style()
     try:
         settings, registry = _load_config(_config_version())
     except AppError as exc:
@@ -56,15 +58,20 @@ def main() -> None:
     with db.open_db(settings.db_path) as conn:
         if not require_login(conn, settings):
             st.stop()
+        assets = Path(__file__).parent / "ui" / "assets"
+        st.logo(str(assets / "logo.svg"), icon_image=str(assets / "icon.svg"), size="large")
         pages = [
-            st.Page(lambda: opportunities.render(conn, settings.db_path),
+            st.Page(lambda: opportunities.render(conn, settings, registry),
                     title="Opportunities", icon="🎯", url_path="opportunities", default=True),
+            st.Page(lambda: problems_page.render(conn, settings, registry),
+                    title="Top problems", icon="🧩", url_path="problems"),
             st.Page(lambda: import_page.render(conn, settings, registry),
                     title="Import posts", icon="📥", url_path="import"),
             st.Page(lambda: settings_page.render(conn, settings, registry),
                     title="Settings & costs", icon="⚙️", url_path="settings"),
         ]
         st.navigation(pages).run()
+        logout_button()
 
 
 main()

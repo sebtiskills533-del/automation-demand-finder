@@ -1,17 +1,18 @@
-from app.ui.table import EDITABLE_COLUMNS, build_table, edits_to_changes, stars
+from app.ui.components import md_escape, status_text, verdict_text
+from app.ui.table import TABLE_COLUMNS, build_table, stars
 
 ROW = {
     "id": "reddit_1", "url": "https://www.reddit.com/r/x/comments/1/", "title": "T",
     "opportunity_score": 80, "seriousness": 4, "delivery_min_days": 1, "delivery_max_days": 3,
-    "est_hours": 3.0, "difficulty": "low", "tool": "Zapier", "product_potential": 4,
-    "contact_method": "Public reply", "region_hint": "Unknown", "summary": "S", "source": "r/x",
-    "posted_at": "2026-11-18T09:30:00Z", "status": "New", "path": None, "notes": "",
+    "est_hours": 3.0, "difficulty": "low", "source": "r/x",
+    "posted_at": "2026-11-18T09:30:00Z", "status": "New",
 }
 
 
 def test_stars():
-    assert stars(4) == "★★★★☆ 4/5"
-    assert stars(9) == "★★★★★ 5/5"
+    assert stars(4) == "★★★★☆"
+    assert stars(9) == "★★★★★"
+    assert stars(-1) == "☆☆☆☆☆"
 
 
 def test_build_table():
@@ -21,47 +22,32 @@ def test_build_table():
         {**ROW, **no_window, "id": "reddit_2", "status": "Building", "difficulty": "high", "est_hours": 40},
         {**ROW, **no_window, "id": "reddit_3"},  # small, but judged "not a job"
     ])
-    assert table.loc["reddit_3"]["Delivery"] == "Skip - not a job"
+    assert list(table.columns) == TABLE_COLUMNS
     assert list(table.index) == ["reddit_1", "reddit_2", "reddit_3"]
     first = table.loc["reddit_1"]
-    assert first["Verdict"] == "Work on this"
+    assert first["Verdict"] == "🟢 Work on this"
     assert first["Delivery"] == "1-3 days"
     assert first["Posted"] == "2026-11-18"
-    assert bool(first["Ticked"]) is False
-    second = table.loc["reddit_2"]
-    assert bool(second["Ticked"]) is True and second["Delivery"] == "Skip - too big"
-    assert second["Verdict"] == "Skip"
-    assert set(EDITABLE_COLUMNS) <= set(table.columns)
+    assert first["Status"] == "🆕 New"
+    assert table.loc["reddit_2"]["Delivery"] == "Skip - too big"
+    assert table.loc["reddit_3"]["Delivery"] == "Skip - not a job"
+    assert table.loc["reddit_2"]["Verdict"] == "⚪ Skip"
 
 
 def test_build_table_empty():
     assert build_table([]).empty
 
 
-IDS = ["a", "b", "c"]
-STATUSES = ["New", "Ticked", "Sold"]
+def test_verdict_and_status_text():
+    assert verdict_text(55) == "🟠 Worth a look"
+    assert status_text("Sold") == "💰 Sold"
+    assert status_text("Unknown") == "Unknown"
 
 
-def test_tick_and_untick():
-    assert edits_to_changes({0: {"Ticked": True}}, IDS, STATUSES) == [("a", {"status": "Ticked"})]
-    assert edits_to_changes({1: {"Ticked": False}}, IDS, STATUSES) == [("b", {"status": "New"})]
-
-
-def test_untick_never_loses_a_later_status():
-    assert edits_to_changes({2: {"Ticked": False}}, IDS, STATUSES) == []
-
-
-def test_status_column_wins_over_tick_box():
-    changes = edits_to_changes({0: {"Ticked": True, "Status": "Building"}}, IDS, STATUSES)
-    assert changes == [("a", {"status": "Building"})]
-
-
-def test_path_and_notes():
-    changes = edits_to_changes({0: {"Path": "Product", "Notes": "bundle"}, 1: {"Path": None}}, IDS, STATUSES)
-    assert changes == [("a", {"path": "Product", "notes": "bundle"}), ("b", {"path": None})]
-
-
-def test_invalid_values_and_stale_rows_are_ignored():
-    assert edits_to_changes({0: {"Status": "Hacked"}}, IDS, STATUSES) == []
-    assert edits_to_changes({7: {"Ticked": True}}, IDS, STATUSES) == []
-    assert edits_to_changes({"1": {"Path": "Lottery"}}, IDS, STATUSES) == [("b", {"path": None})]
+def test_md_escape_neutralises_links_images_and_formatting():
+    evil = "![x](http://tracker.example/p.png) [click](javascript:alert(1)) **bold** <b>hi</b>"
+    escaped = md_escape(evil)
+    assert "](" not in escaped.replace("\\]\\(", "")  # every bracket/paren is escaped
+    assert "\\*\\*bold\\*\\*" in escaped and "\\<b\\>" in escaped
+    assert md_escape("line1\n\n# heading") == "line1 \\# heading"
+    assert md_escape(None) == ""

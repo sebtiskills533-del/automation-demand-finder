@@ -12,3 +12,28 @@ gatherUsageStats = false
 [client]
 toolbarMode = "minimal"
 showErrorDetails = false
+
+# Calm teal + warm amber theme. Text colours meet WCAG AA contrast.
+[theme]
+base = "light"
+primaryColor = "#0F766E"                 # teal: buttons, sliders, selection
+backgroundColor = "#F6F8FA"              # soft off-white page
+secondaryBackgroundColor = "#EAF1F3"     # inputs, code blocks, cards
+textColor = "#1C2B33"                    # dark slate
+linkColor = "#0F766E"
+borderColor = "#D5E0E4"
+showWidgetBorder = true
+baseRadius = "0.6rem"
+dataframeHeaderBackgroundColor = "#E3EFEE"
+greenColor = "#15803D"                   # "Work on this"
+orangeColor = "#B45309"                  # "Worth a look"
+grayColor = "#64748B"                    # "Skip"
+redColor = "#B91C1C"
+blueColor = "#1D4ED8"
+
+[theme.sidebar]
+backgroundColor = "#0F3D3A"              # deep teal sidebar
+secondaryBackgroundColor = "#185550"
+textColor = "#E8F3F1"
+primaryColor = "#F59E0B"                 # amber accents in the sidebar
+borderColor = "#2A6B65"

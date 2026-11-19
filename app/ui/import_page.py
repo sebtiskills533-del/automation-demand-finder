@@ -17,6 +17,7 @@ from app.config import PROJECT_ROOT, Settings
 from app.errors import AppError
 from app.importer import TEMPLATE_CSV, ImportReport, decode_upload, import_rows, import_text
 from app.models_registry import ModelRegistry
+from app.ui.components import page_header
 from app.domain import utc_now
 from app.muse.browser import STALE_LOCK_SECONDS, open_for_setup
 from app.muse.job import MAX_FOCUS_CHARS, clean_focus
@@ -37,25 +38,27 @@ Reply with only the CSV, starting with the header line."""
 
 
 def render(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry) -> None:
-    st.title("Import posts")
-    st.write(
-        "Found a good request on Facebook, Instagram, Quora, LinkedIn or anywhere else? "
-        "Add it here and Claude will rate it like every other post. "
-        "Emails and phone numbers are removed automatically."
+    page_header(
+        "📥 Import posts",
+        "Found a good request on Facebook, Instagram, Quora or anywhere else? Add it here and Claude "
+        "rates it like every other post. Emails and phone numbers are removed automatically.",
     )
 
-    one, upload, paste = st.tabs(["Add one post", "Upload a file", "Paste CSV / JSON"])
-    with one:
-        _single_post_form(conn)
-    with upload:
-        _upload(conn)
-    with paste:
-        _paste(conn)
+    with st.container(border=True):
+        st.markdown("#### ➕ Add posts yourself")
+        one, upload, paste = st.tabs(["Add one post", "Upload a file", "Paste CSV / JSON"])
+        with one:
+            _single_post_form(conn)
+        with upload:
+            _upload(conn)
+        with paste:
+            _paste(conn)
 
-    st.divider()
-    _rate_now(conn, settings, registry)
-    st.divider()
-    _muse_section(conn, settings)
+    with st.container(border=True):
+        _rate_now(conn, settings, registry)
+
+    with st.container(border=True):
+        _muse_section(conn, settings)
     _agent_help()
 
 
@@ -65,7 +68,7 @@ def _single_post_form(conn: sqlite3.Connection) -> None:
         title = st.text_input("Title or first sentence", max_chars=500)
         text = st.text_area("Post text (optional but helps the rating)", max_chars=20_000)
         author = st.text_input("Public username (optional)", max_chars=50)
-        submitted = st.form_submit_button("Add post")
+        submitted = st.form_submit_button("Add post", type="primary")
     if submitted:
         _show(import_rows(conn, [{"url": url, "title": title, "text": text, "author": author}]))
 
@@ -108,7 +111,7 @@ def _show(report: ImportReport) -> None:
 
 
 def _rate_now(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry) -> None:
-    st.subheader("Rate new posts")
+    st.markdown("#### ⭐ Rate new posts")
     model = registry.model_for_task(conn, "analyze")
     st.caption(
         f"Uses {model.name}. Rates up to {settings.max_posts_per_run} waiting posts "
@@ -133,7 +136,7 @@ def _rate_now(conn: sqlite3.Connection, settings: Settings, registry: ModelRegis
 
 
 def _muse_section(conn: sqlite3.Connection, settings: Settings) -> None:
-    st.subheader("Collect with Muse")
+    st.markdown("#### 🤖 Collect with Muse")
     muse = settings.muse
     if not muse.enabled:
         st.info(

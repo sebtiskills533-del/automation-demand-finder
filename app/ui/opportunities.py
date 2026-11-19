@@ -1,67 +1,105 @@
-"""Main page: ranked opportunities with filters, tick boxes and status tracking."""
+"""Main page: ranked opportunities. Click a row to see it, reply, report and track it."""
 
 from __future__ import annotations
 
 import logging
 import math
 import sqlite3
+from datetime import timedelta
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 
 from app import db, store
-from app.domain import DIFFICULTIES, MAX_NOTES_CHARS, PATHS, PLATFORM_NAMES, STATUSES
-from app.scoring import opportunity_label
+from app.budget import month_start
+from app.cli import build_llm
+from app.config import Settings
+from app.domain import (
+    DIFFICULTIES,
+    MAX_NOTES_CHARS,
+    MAX_REPLY_CHARS,
+    PATHS,
+    PLATFORM_NAMES,
+    STATUSES,
+    TICKED_STATUSES,
+    utc_now,
+)
+from app.errors import AppError
+from app.models_registry import ModelRegistry
+from app.replies import draft_reply
+from app.reports import make_report
 from app.store import DashboardFilters
 from app.timeline import delivery_label
-from app.ui.table import EDITABLE_COLUMNS, build_table, edits_to_changes, stars
+from app.ui.components import (
+    REPORT_STYLE,
+    STATUS_ICONS,
+    empty_state,
+    labelled_text,
+    md_escape,
+    page_header,
+    verdict_badge,
+)
+from app.ui.table import build_table, stars
 
 log = logging.getLogger(__name__)
 
 PAGE_SIZE = 50
-_EDITOR_VERSION = "editor_version"
+BEST_SCORE = 45
+
+# Quick views: (statuses to show, minimum score)
+QUICK_VIEWS = {
+    "⭐ Best leads": (("New", "Ticked"), BEST_SCORE),
+    "🛠️ In progress": (("Ticked", "Building"), 0),
+    "📋 All": ((), 0),
+    "💰 Done & sold": (("Done", "Sold"), 0),
+    "🚫 Skipped": (("Skipped",), 0),
+}
 
 
-def render(conn: sqlite3.Connection, db_path: Path) -> None:
-    st.title("Opportunities")
-    _show_totals(conn)
+def render(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry) -> None:
+    page_header("🎯 Opportunities", "Best posts first. Click a row to read it, draft a reply and track it.")
+    _summary(conn, settings)
 
-    filters = _sidebar_filters(db_path)
+    view = st.segmented_control("Show", list(QUICK_VIEWS), default="⭐ Best leads", key="quick_view")
+    view = view or "⭐ Best leads"
+    statuses, min_score = QUICK_VIEWS[view]
+    filters = _sidebar_filters(settings.db_path, statuses, min_score)
+
     total = store.count_dashboard_rows(conn, filters)
     if total == 0:
-        st.info(
-            "No analysed posts match. Run the daily job "
-            "(`.venv\\Scripts\\python run_daily.py`) or loosen the filters in the sidebar."
+        empty_state(
+            "Nothing here yet",
+            "Try another view above, loosen the sidebar filters, or run the daily job "
+            "(desktop icon) to collect new posts.",
         )
         return
 
     pages = math.ceil(total / PAGE_SIZE)
-    page = st.number_input(f"Page (of {pages})", 1, pages, 1) if pages > 1 else 1
+    page = 1
+    if pages > 1:
+        page = st.number_input(f"Page (1-{pages})", 1, pages, 1, key="page")
     rows = store.get_dashboard_rows(conn, filters, PAGE_SIZE, (page - 1) * PAGE_SIZE)
-    st.caption(f"{total} matching posts, best first. Tick the ones worth acting on; changes save instantly.")
+    st.caption(f"{total} posts · page {page} of {pages}")
 
-    table = build_table(rows)
-    editor_key = f"opportunities_{st.session_state.get(_EDITOR_VERSION, 0)}"
-    st.data_editor(
-        table,
-        key=editor_key,
-        hide_index=True,
-        width="stretch",
-        height=min(38 + 35 * len(table), 700),
-        disabled=[c for c in table.columns if c not in EDITABLE_COLUMNS],
-        column_config=_column_config(),
-        on_change=_save_edits,
-        args=(db_path, editor_key, list(table.index), list(table["Status"])),
-    )
-    _details(rows)
+    selected = _table(rows, key=f"table_{hash((view, filters, page))}")
+    st.write("")
+    _details(conn, settings, registry, selected["id"])
 
 
-def _show_totals(conn: sqlite3.Connection) -> None:
-    totals = store.count_posts(conn)
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Posts collected", totals["collected"])
-    c2.metric("Looked like requests", totals["passed"])
-    c3.metric("Analysed by Claude", totals["analyzed"])
+# ------------------------------------------------------------------ top
+
+
+def _summary(conn: sqlite3.Connection, settings: Settings) -> None:
+    counts = store.dashboard_counts(conn, BEST_SCORE, utc_now() - timedelta(days=1))
+    spent = store.spend_since(conn, month_start(utc_now()))
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("⭐ Best leads (score 45+)", counts["best"])
+    c2.metric("🛠️ In progress", counts["active"])
+    c3.metric("🆕 Rated in last 24 h", counts["new_today"])
+    limit = settings.monthly_budget_usd * settings.usd_to_inr
+    c4.metric("💳 AI spend this month", f"Rs {spent * settings.usd_to_inr:.0f} / {limit:.0f}",
+              help="Spent so far this month / your monthly limit (MONTHLY_BUDGET_USD in .env).")
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -71,20 +109,20 @@ def _sources(db_path: str) -> list[str]:
         return store.distinct_sources(conn)
 
 
-def _sidebar_filters(db_path: Path) -> DashboardFilters:
+def _sidebar_filters(db_path: Path, statuses: tuple[str, ...], min_score: int) -> DashboardFilters:
     with st.sidebar:
-        st.header("Filters")
-        search = st.text_input("Search title or summary", max_chars=100)
-        min_score = st.slider("Minimum opportunity score", 0, 100, 0, step=5)
-        min_seriousness = st.slider("Minimum seriousness", 1, 5, 1)
-        difficulties = st.multiselect("Difficulty", DIFFICULTIES)
-        statuses = st.multiselect("Status", STATUSES)
-        sources = st.multiselect("Source", _sources(str(db_path)))
-        buildable_only = st.checkbox("Buildable only")
+        st.markdown("### 🔍 Filters")
+        search = st.text_input("Search", max_chars=100, placeholder="e.g. Google Sheets, Etsy")
+        with st.expander("More filters"):
+            min_score = st.slider("Minimum score", 0, 100, min_score, step=5, key=f"min_score_{min_score}")
+            min_seriousness = st.slider("Minimum seriousness", 1, 5, 1)
+            difficulties = st.multiselect("Difficulty", DIFFICULTIES)
+            sources = st.multiselect("Source", _sources(str(db_path)))
+            buildable_only = st.checkbox("Only jobs I can build")
     return DashboardFilters(
         difficulties=tuple(difficulties),
         sources=tuple(sources),
-        statuses=tuple(statuses),
+        statuses=statuses,
         min_score=min_score,
         min_seriousness=min_seriousness,
         buildable_only=buildable_only,
@@ -92,81 +130,184 @@ def _sidebar_filters(db_path: Path) -> DashboardFilters:
     )
 
 
-def _column_config() -> dict:
+def _table(rows: list[dict], key: str) -> dict:
+    """The ranked table; returns the selected row (the first one if none is selected)."""
+    table = build_table(rows)
     cc = st.column_config
-    return {
-        "Post": cc.LinkColumn("Post", display_text="Open ↗", help="Open the original post", width="small"),
-        "Title": cc.TextColumn("Title", width="large"),
-        "Verdict": cc.TextColumn("Verdict", help="Work on this ≥ 70, Worth a look ≥ 45, else Skip"),
-        "Score": cc.ProgressColumn("Score", min_value=0, max_value=100, format="%d",
-                                   help="Opportunity score: seriousness, product potential and ease"),
-        "Seriousness": cc.TextColumn("Seriousness", help="How likely this is a real, committed person (1-5)"),
-        "Delivery": cc.TextColumn("Delivery", help="Days to promise the client (includes a safety margin)"),
-        "Hours": cc.NumberColumn("Hours", format="%.1f", help="Estimated build + test hours"),
-        "Potential": cc.NumberColumn("Potential", help="Product potential 1-5"),
-        "Contact": cc.TextColumn("Contact", width="medium", help="The allowed way to reach this person"),
-        "Summary": cc.TextColumn("Summary", width="large"),
-        "Ticked": cc.CheckboxColumn("Ticked"),
-        "Status": cc.SelectboxColumn("Status", options=list(STATUSES), required=True),
-        "Path": cc.SelectboxColumn("Path", options=list(PATHS)),
-        "Notes": cc.TextColumn("Notes", max_chars=MAX_NOTES_CHARS),
-    }
-
-
-def _save_edits(db_path: Path, editor_key: str, post_ids: list[str], statuses: list[str]) -> None:
-    """Runs when a cell changes: save to the database, then reset the editor."""
-    edited_rows = st.session_state.get(editor_key, {}).get("edited_rows", {})
-    changes = edits_to_changes(edited_rows, post_ids, statuses)
-    try:
-        with db.open_db(db_path) as conn:
-            for post_id, fields in changes:
-                store.update_action(conn, post_id, **fields)
-    except (ValueError, sqlite3.Error) as exc:
-        log.exception("Saving dashboard edits failed")
-        st.toast(f"Could not save: {exc}", icon="⚠️")
-    else:
-        if changes:
-            st.toast("Saved", icon="✅")
-    # A new key gives a fresh editor that shows exactly what's in the database.
-    st.session_state[_EDITOR_VERSION] = st.session_state.get(_EDITOR_VERSION, 0) + 1
-
-
-def _details(rows: list[dict]) -> None:
-    """Full details for one post. Post text is shown as plain text, never as HTML."""
-    st.subheader("Post details")
-    by_id = {r["id"]: r for r in rows}
-    chosen = st.selectbox(
-        "Pick a post from this page",
-        list(by_id),
-        format_func=lambda pid: f"[{by_id[pid]['opportunity_score']}] {by_id[pid]['title'][:100]}",
+    event = st.dataframe(
+        table,
+        key=key,
+        hide_index=True,
+        width="stretch",
+        height=min(40 + 35 * len(table), 460),
+        on_select="rerun",
+        selection_mode="single-row",
+        column_order=["Verdict", "Score", "Title", "Delivery", "Source", "Status", "Post"],
+        column_config={
+            "Verdict": cc.TextColumn("Verdict", width=135),
+            "Score": cc.ProgressColumn("Score", min_value=0, max_value=100, format="%d", width=85),
+            "Title": cc.TextColumn("Title", width=330),
+            "Delivery": cc.TextColumn("Delivery", width=95, help="Days to promise (includes a safety margin)"),
+            "Seriousness": cc.TextColumn("Serious", width=85, help="How real and committed the person seems"),
+            "Source": cc.TextColumn("Source", width=135),
+            "Status": cc.TextColumn("Status", width=100),
+            "Post": cc.LinkColumn("Link", display_text="Open ↗", width=75),
+        },
     )
-    if chosen is None:
+    chosen = event.selection.rows if event and event.selection else []
+    index = chosen[0] if chosen and chosen[0] < len(rows) else 0
+    if not chosen:
+        st.caption("👆 Click any row to open it. Showing the top post below.")
+    return rows[index]
+
+
+# -------------------------------------------------------------- details
+
+
+def _details(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry, post_id: str) -> None:
+    post = store.get_post_details(conn, post_id)
+    if post is None:
         return
-    r = by_id[chosen]
+    with st.container(border=True):
+        # Titles come from strangers: escaped so links/images/formatting can't appear.
+        st.markdown(f"### {md_escape(post['title'])}")
+        # Source names can come from imports/Muse, so they are escaped too.
+        st.caption(f"{md_escape(post['source'])} · posted {post['posted_at'][:10]} · "
+                   f"by {md_escape(post['author_handle'] or 'unknown')}")
+        _badges(post)
+        st.link_button(f"Open the original post on {PLATFORM_NAMES[post['platform']]} ↗", post["url"])
 
-    st.link_button(f"Open the original post on {PLATFORM_NAMES[r['platform']]} ↗", r["url"])
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Verdict", opportunity_label(r["opportunity_score"]), f"score {r['opportunity_score']}",
-              delta_color="off")
-    c2.metric("Seriousness", stars(r["seriousness"]))
-    c3.metric("Delivery", delivery_label(r["delivery_min_days"], r["delivery_max_days"],
-                                         r["difficulty"], r["est_hours"]),
-              f"{r['est_hours']:g} build hours", delta_color="off")
-    c4.metric("Difficulty", r["difficulty"].capitalize(), r["tool"], delta_color="off")
+        overview, reply, report, track = st.tabs(
+            ["📄 Overview", "✍️ Reply", "📋 Decision report", "🗂️ Track"], key=f"tabs_{post_id}"
+        )
+        with overview:
+            _overview(post)
+        with reply:
+            _reply_tab(conn, settings, registry, post)
+        with report:
+            _report_tab(conn, settings, registry, post)
+        with track:
+            _track_tab(conn, post)
 
-    # Everything below came from strangers or from AI reading their text:
-    # st.text shows it literally, so links, images or scripts in it can't run.
-    for label, key in (
-        ("Summary", "summary"),
-        ("Why this seriousness rating", "seriousness_reason"),
-        ("Difficulty reasoning", "reason"),
-        ("How to contact", "contact_method"),
-        ("Region (only if stated in the post)", "region_hint"),
-    ):
-        st.caption(label)
-        st.text(r[key])
-    st.caption("Full post")
-    st.text(
-        f"{r['source']} · posted {r['posted_at'][:10]} · by {r['author_handle'] or 'unknown'}\n\n"
-        f"{r['title']}\n\n{r['body'] or '(no text)'}"
+
+def _badges(post: dict) -> None:
+    with st.container(horizontal=True, gap="small"):
+        verdict_badge(post["opportunity_score"])
+        st.badge(delivery_label(post["delivery_min_days"], post["delivery_max_days"],
+                                post["difficulty"], post["est_hours"]),
+                 icon=":material/schedule:", color="blue")
+        st.badge(f"{post['difficulty'].capitalize()} · {post['est_hours']:g} h",
+                 icon=":material/build:", color="gray")
+        st.badge(f"Serious {stars(post['seriousness'])}", icon=":material/person:", color="violet")
+        st.badge(f"{STATUS_ICONS.get(post['status'], '')} {post['status']}", color="primary")
+
+
+def _overview(post: dict) -> None:
+    left, right = st.columns(2)
+    with left:
+        labelled_text("What they need", post["summary"])
+        labelled_text("Why this seriousness rating", post["seriousness_reason"])
+        labelled_text("Difficulty reasoning", post["reason"])
+    with right:
+        labelled_text("Best tool", post["tool"])
+        labelled_text("How to contact them (the allowed way)", post["contact_method"])
+        labelled_text("Region (only if stated in the post)", post["region_hint"])
+        labelled_text("Product potential", f"{stars(post['product_potential'])}  ({post['product_potential']}/5)")
+    with st.expander("Read the full post"):
+        st.text(f"{post['title']}\n\n{post['body'] or '(no text)'}")
+
+
+def _reply_tab(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry, post: dict) -> None:
+    model = registry.model_for_task(conn, "reply")
+    st.caption(f"Claude writes a short, helpful reply (a free tip first). You edit it and post it "
+               f"yourself — nothing is ever posted for you. Uses {model.name}.")
+    has_draft = bool(post["reply_draft"])
+    if st.button("✨ Write a new draft" if has_draft else "✨ Draft a reply with Claude",
+                 type="secondary" if has_draft else "primary", key=f"draft_{post['id']}"):
+        if _run_ai(lambda: draft_reply(conn, build_llm(settings, conn), registry, settings, post["id"]),
+                   "Claude is writing a reply..."):
+            st.rerun()
+    if not has_draft:
+        return
+
+    edited = st.text_area("Your reply (edit freely)", post["reply_draft"], height=170,
+                          max_chars=MAX_REPLY_CHARS, key=f"reply_{post['id']}")
+    c1, c2 = st.columns([1, 3])
+    if c1.button("💾 Save edits", key=f"save_reply_{post['id']}") and edited != post["reply_draft"]:
+        store.update_action(conn, post["id"], reply_draft=edited)
+        st.toast("Reply saved", icon="✅")
+    c2.caption(f"{len(edited.split())} words. Copy it with the button in the box below.")
+    st.code(edited, language=None, wrap_lines=True)
+
+
+def _report_tab(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry, post: dict) -> None:
+    if post["status"] not in TICKED_STATUSES:
+        st.info("Tick this post first (in the 🗂️ Track tab) to make a Decision Report. "
+                "Reports are only made for posts you chose, which keeps costs low.")
+        return
+    report = store.get_decision_report(conn, post["id"])
+    model = registry.model_for_task(conn, "report")
+    label = "🔄 Make a new report" if report else "📋 Make Decision Report"
+    if st.button(label, type="secondary" if report else "primary", key=f"report_{post['id']}"):
+        if _run_ai(lambda: make_report(conn, build_llm(settings, conn), registry, settings, post["id"]),
+                   "Claude is preparing the report..."):
+            st.rerun()
+    st.caption(f"Should you do it, the steps, the delivery time and how to reach them. Uses {model.name}.")
+    if report:
+        _report_card(post, report)
+
+
+def _report_card(post: dict, report: dict) -> None:
+    color, emoji = REPORT_STYLE[report["verdict"]]
+    st.badge(f"{emoji} {report['verdict']}", color=color)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Build + test", f"{report['build_hours']:g} h")
+    c2.metric("Promise to deliver", delivery_label(report["delivery_min_days"], report["delivery_max_days"],
+                                                   post["difficulty"], report["build_hours"]))
+    c3.metric("Steps", len(report["plan"]))
+    st.markdown("**Why**")
+    st.markdown("\n".join(f"- {md_escape(reason)}" for reason in report["reasons"]))
+    labelled_text("How to contact them", report["contact_method"])
+    with st.expander("🧭 A-to-Z plan"):
+        st.dataframe(
+            pd.DataFrame([{"#": n, "Step": s["title"], "Hours": s["hours"]}
+                          for n, s in enumerate(report["plan"], start=1)]),
+            hide_index=True, width="stretch",
+        )
+    st.caption("Ready draft (copy with the button in the box)")
+    st.code(report["draft"], language=None, wrap_lines=True)
+
+
+def _track_tab(conn: sqlite3.Connection, post: dict) -> None:
+    status = st.segmented_control(
+        "Status", list(STATUSES), default=post["status"], key=f"status_{post['id']}",
+        format_func=lambda s: f"{STATUS_ICONS[s]} {s}",
     )
+    if status and status != post["status"]:
+        store.update_action(conn, post["id"], status=status)
+        st.toast(f"Status: {status}", icon="✅")
+        st.rerun()
+
+    path = st.segmented_control("What will you do with it?", list(PATHS),
+                                default=post["path"], key=f"path_{post['id']}")
+    if path != post["path"]:
+        store.update_action(conn, post["id"], path=path)
+        st.toast("Saved", icon="✅")
+
+    notes = st.text_area("Notes", post["notes"], max_chars=MAX_NOTES_CHARS, key=f"notes_{post['id']}",
+                         placeholder="e.g. Replied on 20 Nov, waiting for answer")
+    if st.button("💾 Save notes", key=f"save_notes_{post['id']}") and notes != post["notes"]:
+        store.update_action(conn, post["id"], notes=notes)
+        st.toast("Notes saved", icon="✅")
+
+
+def _run_ai(action, spinner: str) -> bool:
+    """Run a Claude action with a spinner; show a friendly error instead of crashing."""
+    try:
+        with st.spinner(spinner):
+            action()
+        return True
+    except (AppError, ValueError) as exc:
+        log.warning("Dashboard AI action failed: %s", exc)
+        st.error(str(exc))
+        return False
