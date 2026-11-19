@@ -16,6 +16,7 @@ from app.config import Settings
 from app.llm import ClaudeClient
 from app.models_registry import ModelRegistry
 from app.privacy import is_valid_email, strip_contact_details
+from app.services import offer_summary
 from app.writing import DEFAULT_STYLE, delivery_hint, get_style, style_rules
 
 TASK = "email"
@@ -45,7 +46,7 @@ class EmailDraft(BaseModel):
 
 def system_prompt(style: str = DEFAULT_STYLE) -> str:
     """The instructions for an email in the chosen writing style."""
-    return f"""You write a short, friendly email for a beginner freelancer who builds small automations (Google Sheets + Apps Script, Zapier, Make, n8n). The person replied to the freelancer online and shared their email so the freelancer could contact them. The goal: they understand how their problem will be solved, and they want the freelancer to do it.
+    return f"""You write a short, friendly email for a beginner freelancer who offers: {offer_summary()}. The person replied to the freelancer online and shared their email so the freelancer could contact them. The goal: they understand how their problem will be solved, and they want the freelancer to do it.
 
 {style_rules(style, "email")}
 

@@ -30,6 +30,7 @@ from app.errors import AppError
 from app.models_registry import ModelRegistry
 from app.replies import draft_reply
 from app.reports import make_report
+from app.services import badge_for, service_ids
 from app.store import DashboardFilters
 from app.timeline import delivery_label
 from app.ui.components import (
@@ -119,11 +120,13 @@ def _sidebar_filters(db_path: Path, statuses: tuple[str, ...], min_score: int) -
         with st.expander("More filters"):
             min_score = st.slider("Minimum score", 0, 100, min_score, step=5, key=f"min_score_{min_score}")
             min_seriousness = st.slider("Minimum seriousness", 1, 5, 1)
+            services = st.multiselect("Service", list(service_ids()), format_func=badge_for)
             difficulties = st.multiselect("Difficulty", DIFFICULTIES)
             sources = st.multiselect("Source", _sources(str(db_path)))
             buildable_only = st.checkbox("Only jobs I can build")
     return DashboardFilters(
         difficulties=tuple(difficulties),
+        services=tuple(services),
         sources=tuple(sources),
         statuses=statuses,
         min_score=min_score,
@@ -145,14 +148,15 @@ def _table(rows: list[dict], key: str) -> dict:
         height=min(40 + 35 * len(table), 460),
         on_select="rerun",
         selection_mode="single-row",
-        column_order=["Verdict", "Score", "Title", "Delivery", "Source", "Status", "Post"],
+        column_order=["Verdict", "Score", "Service", "Title", "Delivery", "Source", "Status", "Post"],
         column_config={
-            "Verdict": cc.TextColumn("Verdict", width=135),
+            "Verdict": cc.TextColumn("Verdict", width=125),
             "Score": cc.ProgressColumn("Score", min_value=0, max_value=100, format="%d", width=85),
-            "Title": cc.TextColumn("Title", width=330),
+            "Service": cc.TextColumn("Service", width=110),
+            "Title": cc.TextColumn("Title", width=250),
             "Delivery": cc.TextColumn("Delivery", width=95, help="Days to promise (includes a safety margin)"),
             "Seriousness": cc.TextColumn("Serious", width=85, help="How real and committed the person seems"),
-            "Source": cc.TextColumn("Source", width=135),
+            "Source": cc.TextColumn("Source", width=120),
             "Status": cc.TextColumn("Status", width=100),
             "Post": cc.LinkColumn("Link", display_text="Open ↗", width=75),
         },
@@ -200,6 +204,7 @@ def _details(conn: sqlite3.Connection, settings: Settings, registry: ModelRegist
 def _badges(post: dict) -> None:
     with st.container(horizontal=True, gap="small"):
         verdict_badge(post["opportunity_score"])
+        st.badge(badge_for(post.get("service")), color="orange")
         st.badge(delivery_label(post["delivery_min_days"], post["delivery_max_days"],
                                 post["difficulty"], post["est_hours"]),
                  icon=":material/schedule:", color="blue")

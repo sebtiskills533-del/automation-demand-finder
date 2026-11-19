@@ -1,30 +1,74 @@
 {
   "reddit": {
-    "subreddits": ["smallbusiness", "automation", "googlesheets", "Etsy", "excel", "zapier"],
+    "subreddits": [
+      "smallbusiness",
+      "automation",
+      "googlesheets",
+      "Etsy",
+      "excel",
+      "zapier",
+      "SEO",
+      "localseo",
+      "bigseo",
+      "EtsySellers"
+    ],
     "posts_per_feed": 25
   },
   "hackernews": {
     "tags": "ask_hn",
-    "queries": ["automate", "automation", "spreadsheet", "workflow"],
+    "queries": [
+      "automate",
+      "automation",
+      "spreadsheet",
+      "workflow",
+      "SEO"
+    ],
     "lookback_hours": 168,
     "hits_per_query": 50
   },
   "stackexchange": {
-    "sites": ["stackoverflow", "webapps", "superuser"],
-    "queries": ["automate", "google sheets"],
+    "sites": [
+      "stackoverflow",
+      "webapps",
+      "superuser",
+      "webmasters"
+    ],
+    "queries": [
+      "automate",
+      "google sheets",
+      "seo",
+      "google business profile"
+    ],
     "lookback_hours": 720,
-    "page_size": 50
+    "page_size": 50,
+    "searches_note": "Each site is searched for each query."
   },
   "forums": [
     {
       "name": "n8n community",
       "base_url": "https://community.n8n.io",
-      "skip_categories": ["Built with n8n", "Tips & Tricks", "News", "Announcements"]
+      "skip_categories": [
+        "Built with n8n",
+        "Tips & Tricks",
+        "News",
+        "Announcements"
+      ]
     },
     {
       "name": "Make community",
       "base_url": "https://community.make.com",
-      "skip_categories": ["Offer Help", "Knowledge Hub", "News", "Announcements"]
+      "skip_categories": [
+        "Offer Help",
+        "Knowledge Hub",
+        "News",
+        "Announcements"
+      ]
+    }
+  ],
+  "rss_forums": [
+    {
+      "name": "Digital Point forums",
+      "feed_url": "https://forums.digitalpoint.com/forums/-/index.rss"
     }
   ]
 }

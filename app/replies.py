@@ -14,6 +14,7 @@ from app.config import Settings
 from app.llm import ClaudeClient
 from app.models_registry import ModelRegistry
 from app.privacy import strip_contact_details
+from app.services import offer_summary
 from app.writing import DEFAULT_STYLE, delivery_hint, get_style, reply_format_rules, style_rules
 
 TASK = "reply"
@@ -37,7 +38,7 @@ class ReplyDraft(BaseModel):
 
 def system_prompt(style: str = DEFAULT_STYLE) -> str:
     """The instructions for a reply in the chosen writing style."""
-    return f"""You write a short public reply for a beginner freelancer who builds small automations (Google Sheets + Apps Script, Zapier, Make, n8n, Python). The freelancer will edit it and post it under their own name. The goal: the person gets real help with their problem, and wants the freelancer's help.
+    return f"""You write a short public reply for a beginner freelancer who offers: {offer_summary()}. The freelancer will edit it and post it under their own name. The goal: the person gets real help with their problem, and wants the freelancer's help.
 
 {style_rules(style, "reply")}
 

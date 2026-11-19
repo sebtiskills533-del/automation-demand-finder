@@ -114,8 +114,8 @@ def save_analysis(conn: sqlite3.Connection, record: AnalysisRecord) -> None:
                (post_id, summary, category, difficulty, tool, est_hours, buildable,
                 product_potential, seriousness, seriousness_reason, wants_to_hire,
                 shares_own_website, region_hint, reason, delivery_min_days,
-                delivery_max_days, contact_method, opportunity_score, model, analyzed_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                delivery_max_days, contact_method, opportunity_score, model, analyzed_at, service)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 record.post_id,
                 record.summary,
@@ -137,6 +137,7 @@ def save_analysis(conn: sqlite3.Connection, record: AnalysisRecord) -> None:
                 record.opportunity_score,
                 record.model,
                 to_iso(utc_now()),
+                record.service,
             ),
         )
 
@@ -218,6 +219,7 @@ class DashboardFilters:
 
     difficulties: tuple[str, ...] = ()
     sources: tuple[str, ...] = ()
+    services: tuple[str, ...] = ()
     statuses: tuple[str, ...] = ()
     min_score: int = 0
     min_seriousness: int = 1
@@ -230,7 +232,7 @@ _DASHBOARD_SELECT = """
            a.summary, a.category, a.difficulty, a.tool, a.est_hours, a.buildable,
            a.product_potential, a.seriousness, a.seriousness_reason, a.wants_to_hire,
            a.region_hint, a.reason, a.delivery_min_days, a.delivery_max_days,
-           a.contact_method, a.opportunity_score, a.model,
+           a.contact_method, a.opportunity_score, a.model, a.service,
            COALESCE(ac.status, ?) AS status, ac.path, COALESCE(ac.notes, '') AS notes,
            COALESCE(ac.reply_draft, '') AS reply_draft, a.cluster_id
     FROM posts p
@@ -253,6 +255,7 @@ def _dashboard_where(filters: DashboardFilters) -> tuple[str, list[object]]:
 
     in_list("a.difficulty", filters.difficulties, DIFFICULTIES)
     in_list("p.source", filters.sources, None)
+    in_list("a.service", filters.services, None)
     in_list("COALESCE(ac.status, 'New')", filters.statuses, STATUSES)
     if filters.buildable_only:
         clauses.append("a.buildable = 1")

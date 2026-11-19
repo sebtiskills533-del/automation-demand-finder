@@ -21,6 +21,7 @@ from app.domain import REPORT_VERDICTS, TICKED_STATUSES
 from app.llm import ClaudeClient
 from app.models_registry import ModelRegistry
 from app.privacy import strip_contact_details
+from app.services import offer_summary
 from app.timeline import EASY_MAX_HOURS, MEDIUM_MAX_HOURS, delivery_window
 from app.writing import CLEAR_AND_CONVINCING, delivery_hint
 
@@ -47,8 +48,8 @@ class ReportDraft(BaseModel):
         return value.strip()
 
 
-SYSTEM_PROMPT = f"""You write a Decision Report for a beginner freelancer who builds small automations \
-with Claude Code. Using the post and its analysis, return:
+SYSTEM_PROMPT = f"""You write a Decision Report for a beginner freelancer who works with Claude Code \
+and offers: {offer_summary()}. Using the post and its analysis, return:
 - verdict: "Do it", "Think first" or "Skip".
 - reasons: 3-5 short reasons covering difficulty, whether a beginner can build it with Claude Code, \
 support risk after delivery, and product potential (could it become a sellable template?).

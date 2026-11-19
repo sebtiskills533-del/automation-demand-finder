@@ -47,7 +47,10 @@ def platform_for_host(host: str) -> str:
 
 DIFFICULTIES = ("low", "medium", "high")
 
-TOOLS = ("Google Sheets + Apps Script", "Zapier", "Make", "n8n", "Python", "Other")
+TOOLS = (
+    "Google Sheets + Apps Script", "Zapier", "Make", "n8n", "Python",
+    "Etsy", "SEO tools", "Google Business Profile", "Other",
+)
 
 STATUSES = ("New", "Ticked", "Building", "Done", "Sold", "Skipped")
 DEFAULT_STATUS = "New"
@@ -110,6 +113,7 @@ class AnalysisRecord:
     contact_method: str
     opportunity_score: int
     model: str
+    service: str = "automation"
 
 
 def utc_now() -> datetime:

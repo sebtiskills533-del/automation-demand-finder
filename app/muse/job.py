@@ -21,6 +21,7 @@ from app.importer import import_rows
 from app.inbox import ingest_replies
 from app.muse.browser import STALE_LOCK_SECONDS, BrowserLock, connected_context
 from app.muse.client import MuseReplyText, ask_muse, read_latest_reply
+from app.services import service_names
 from app.muse.parse import MAX_REPLY_ROWS, POSTS, REPLIES, BlockFormat, is_complete, parse_block
 
 log = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ RECOVERED_FOCUS = "(imported Muse's last reply)"
 REPLY_CHECK_FOCUS = "(checked replies to me)"
 RECOVERED_REPLIES_FOCUS = "(imported Muse's last replies list)"
 DEFAULT_REPLY_DAYS = 14
-DEFAULT_FOCUS = "any small business or freelancer asking for help automating a repetitive task"
+DEFAULT_FOCUS = "any small business owner or seller who needs one of the services below"
 
 
 @dataclass(frozen=True)
@@ -56,11 +57,15 @@ def clean_focus(focus: str) -> str:
 
 
 def build_job_message(focus: str, max_posts: int) -> str:
-    """The single line typed into the Muse side chat (the procedure is already there)."""
+    """The single line typed into the Muse side chat (the procedure is already there).
+    It names the user's services (config/services.json) so Muse looks beyond automation."""
     return (
         f"{JOB_PREFIX} Focus: {focus or DEFAULT_FOCUS}. Maximum {max_posts} posts. "
-        "Use your browser (the Muse Chrome extension) to actually open Quora, Facebook and Instagram "
-        "and search them. If you cannot open them, reply PROBLEM: <what happened>. If nothing matches, "
+        f"A match is a person asking for help with, or wanting to hire someone for, any of: {service_names()}. "
+        "Use your browser (the Muse Chrome extension) to actually open and search: Quora; public Facebook "
+        "groups for small businesses, local businesses and Etsy/Shopify sellers; Instagram; and the Etsy "
+        "Community forums (community.etsy.com: Shop Critiques, Optimizing Your Shop, Marketing). "
+        "If you cannot open them, reply PROBLEM: <what happened>. If nothing matches, "
         "reply NO POSTS FOUND: <where you looked and why>. Otherwise reply only in the exact "
         "POSTS START / POSTS END format from your procedure."
     )

@@ -184,7 +184,14 @@ CREATE INDEX idx_login_sessions_expiry ON login_sessions (expires_at);
 
 # login_sessions: "remember me" cookies. Only a SHA-256 of the token is stored, and
 # password_tag ties each session to the password it was created under.
-MIGRATIONS: tuple[str, ...] = (_SCHEMA_V1, _SCHEMA_V2, _SCHEMA_V3, _SCHEMA_V4, _SCHEMA_V5, _SCHEMA_V6)
+_SCHEMA_V7 = """
+ALTER TABLE analyses ADD COLUMN service TEXT NOT NULL DEFAULT 'automation';
+CREATE INDEX idx_analyses_service ON analyses (service);
+"""
+
+MIGRATIONS: tuple[str, ...] = (
+    _SCHEMA_V1, _SCHEMA_V2, _SCHEMA_V3, _SCHEMA_V4, _SCHEMA_V5, _SCHEMA_V6, _SCHEMA_V7,
+)
 
 
 def connect(db_path: Path) -> sqlite3.Connection:

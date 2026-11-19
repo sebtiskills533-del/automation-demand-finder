@@ -10,10 +10,12 @@ from app.sources.base import Source
 from app.sources.discourse import DiscourseSource
 from app.sources.hackernews import HackerNewsSource
 from app.sources.reddit import RedditSource
+from app.sources.rss_forum import RssForumSource
 from app.sources.stackexchange import StackExchangeSource
 
 __all__ = [
-    "Source", "RedditSource", "HackerNewsSource", "DiscourseSource", "StackExchangeSource", "load_sources",
+    "Source", "RedditSource", "HackerNewsSource", "DiscourseSource", "StackExchangeSource",
+    "RssForumSource", "load_sources",
 ]
 
 
@@ -46,6 +48,9 @@ def load_sources(path: Path) -> list[Source]:
         for site in se.get("sites", []):
             for query in se.get("queries", []):
                 sources.append(StackExchangeSource(site, query, se_lookback, se_page))
+
+        for forum in config.get("rss_forums", []):
+            sources.append(RssForumSource(forum["name"], forum["feed_url"]))
 
         for forum in config.get("forums", []):
             skip = forum.get("skip_categories", [])

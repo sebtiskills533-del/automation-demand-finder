@@ -1,0 +1,29 @@
+{
+  "_note": "The services you offer. The AI uses this to decide which posts are jobs for you, and the replies and emails mention it. Edit freely; keep the ids short (letters and underscores).",
+  "services": [
+    {
+      "id": "automation",
+      "name": "Small automations",
+      "badge": "⚙️ Automation",
+      "details": "Google Sheets + Apps Script, Zapier, Make, n8n and simple Python scripts that remove repetitive work"
+    },
+    {
+      "id": "etsy",
+      "name": "Etsy shop help",
+      "badge": "🛍️ Etsy",
+      "details": "Etsy SEO (titles, tags, descriptions), listing optimisation, shop setup and branding, listing photos and copy, Etsy ads basics"
+    },
+    {
+      "id": "seo",
+      "name": "SEO",
+      "badge": "🔎 SEO",
+      "details": "keyword research, on-page SEO, technical SEO checks, content optimisation, Google Search Console fixes"
+    },
+    {
+      "id": "local_seo",
+      "name": "Local SEO",
+      "badge": "📍 Local SEO",
+      "details": "Google Business Profile setup and optimisation, Google Maps ranking, review strategy, local citations and NAP consistency"
+    }
+  ]
+}

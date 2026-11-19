@@ -22,6 +22,7 @@ from tests.fakes import FakeAnthropic, claude_connection_error, claude_status_er
 
 GOOD = {
     "summary": "Wants Etsy orders copied into Google Sheets",
+    "service": "automation",
     "category": "Orders",
     "difficulty": "low",
     "tool": "Google Sheets + Apps Script",
@@ -173,7 +174,7 @@ def test_prompt_counts_fixes_as_jobs():
     from app.analyze import SYSTEM_PROMPT
 
     assert "fixing, debugging" in SYSTEM_PROMPT
-    assert "problems only the vendor can solve" in SYSTEM_PROMPT
+    assert "problems only the platform can solve" in SYSTEM_PROMPT
 
 
 def test_reset_small_skipped_requeues_only_small_not_a_job_posts(conn, settings, registry):
