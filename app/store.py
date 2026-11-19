@@ -675,6 +675,29 @@ def record_login_attempt(conn: sqlite3.Connection, succeeded: bool, at: datetime
         )
 
 
+def save_login_session(
+    conn: sqlite3.Connection, token_hash: str, password_tag: str, now: datetime, expires: datetime
+) -> None:
+    with transaction(conn):
+        conn.execute("DELETE FROM login_sessions WHERE expires_at < ?", (to_iso(now),))  # tidy up
+        conn.execute(
+            "INSERT INTO login_sessions (token_hash, password_tag, created_at, expires_at) VALUES (?, ?, ?, ?)",
+            (token_hash, password_tag, to_iso(now), to_iso(expires)),
+        )
+
+
+def find_login_session(conn: sqlite3.Connection, token_hash: str, now: datetime) -> dict | None:
+    row = conn.execute(
+        "SELECT * FROM login_sessions WHERE token_hash = ? AND expires_at > ?", (token_hash, to_iso(now))
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def delete_login_session(conn: sqlite3.Connection, token_hash: str) -> None:
+    with transaction(conn):
+        conn.execute("DELETE FROM login_sessions WHERE token_hash = ?", (token_hash,))
+
+
 def failed_logins_since(conn: sqlite3.Connection, since: datetime) -> int:
     """Failed attempts after `since` that came after the last successful login."""
     return conn.execute(

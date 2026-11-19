@@ -91,6 +91,34 @@ def test_new_password_works_without_restarting_dashboard(env, tmp_path, monkeypa
     assert on_page(login("new password 456"), "Opportunities")
 
 
+def test_refresh_with_a_remembered_cookie_skips_the_password(env, monkeypatch):
+    # Regression: every page refresh asked for the password again.
+    import streamlit as st_module
+
+    from app.auth import create_remembered_session
+    from app.config import load_settings
+    from app.domain import utc_now
+
+    with db.open_db(env) as conn:
+        token = create_remembered_session(conn, load_settings().dashboard_password_hash, utc_now())
+
+    class FakeContext:
+        cookies = {"adf_session": token}
+
+    monkeypatch.setattr(st_module, "context", FakeContext())
+    at = AppTest.from_file(DASHBOARD, default_timeout=TIMEOUT).run()  # a fresh session = a refresh
+    assert not at.exception
+    assert on_page(at, "Opportunities")
+    assert not any(t.label == "Password" for t in at.text_input)
+
+
+def test_login_with_remember_me_creates_a_session(env):
+    at = login()
+    assert on_page(at, "Opportunities")
+    with db.open_db(env) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM login_sessions").fetchone()[0] == 1
+
+
 def test_wrong_password(env):
     at = login("not the password")
     assert "Wrong password" in all_text(at)

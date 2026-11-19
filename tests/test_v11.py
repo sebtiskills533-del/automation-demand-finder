@@ -47,7 +47,7 @@ def test_every_task_has_a_default_model(registry, conn):
 def test_schema_v3_tables_exist(conn):
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"decision_reports", "clusters", "product_specs"} <= tables
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == len(db.MIGRATIONS) == 5
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == len(db.MIGRATIONS)
 
 
 # --------------------------------------------------------------- replies

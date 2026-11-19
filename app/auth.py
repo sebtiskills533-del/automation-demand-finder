@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import re
 import secrets
 import sqlite3
 from datetime import datetime, timedelta
@@ -94,6 +95,43 @@ def attempt_login(
 
 def session_expired(logged_in_at: datetime, now: datetime) -> bool:
     return now - logged_in_at > SESSION_LIFETIME
+
+
+# ---------------------------------------------------------- remember me
+# A random token lives in a browser cookie; the database keeps only its SHA-256,
+# tied to the current password, so changing the password logs every browser out.
+
+REMEMBER_FOR = timedelta(days=14)
+COOKIE_NAME = "adf_session"
+_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{43}$")  # secrets.token_urlsafe(32)
+
+
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("ascii")).hexdigest()
+
+
+def _password_tag(stored_hash: str) -> str:
+    return hashlib.sha256(f"session:{stored_hash}".encode("utf-8")).hexdigest()[:32]
+
+
+def create_remembered_session(conn: sqlite3.Connection, stored_hash: str, now: datetime) -> str:
+    """Start a 'remember me' session; returns the token to put in the cookie."""
+    token = secrets.token_urlsafe(32)
+    store.save_login_session(conn, _token_hash(token), _password_tag(stored_hash), now, now + REMEMBER_FOR)
+    return token
+
+
+def check_remembered_session(conn: sqlite3.Connection, token: str | None, stored_hash: str, now: datetime) -> bool:
+    """True if the cookie token is valid, unexpired, and from the current password."""
+    if not isinstance(token, str) or not stored_hash or not _TOKEN_RE.match(token):
+        return False
+    session = store.find_login_session(conn, _token_hash(token), now)
+    return bool(session) and hmac.compare_digest(session["password_tag"], _password_tag(stored_hash))
+
+
+def end_remembered_session(conn: sqlite3.Connection, token: str | None) -> None:
+    if isinstance(token, str) and _TOKEN_RE.match(token):
+        store.delete_login_session(conn, _token_hash(token))
 
 
 def _scrypt(password: str, salt: bytes, n: int, r: int, p: int) -> bytes:

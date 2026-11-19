@@ -172,7 +172,19 @@ CREATE TABLE drafts (
 # replies.email holds an address ONLY when the person wrote it in their reply to the user.
 # drafts keeps one draft per writing style (reply: owner = post id; email: owner = reply id);
 # the chosen one is copied to actions.reply_draft / replies.email_subject+email_body.
-MIGRATIONS: tuple[str, ...] = (_SCHEMA_V1, _SCHEMA_V2, _SCHEMA_V3, _SCHEMA_V4, _SCHEMA_V5)
+_SCHEMA_V6 = """
+CREATE TABLE login_sessions (
+    token_hash    TEXT PRIMARY KEY,
+    password_tag  TEXT NOT NULL,
+    created_at    TEXT NOT NULL,
+    expires_at    TEXT NOT NULL
+);
+CREATE INDEX idx_login_sessions_expiry ON login_sessions (expires_at);
+"""
+
+# login_sessions: "remember me" cookies. Only a SHA-256 of the token is stored, and
+# password_tag ties each session to the password it was created under.
+MIGRATIONS: tuple[str, ...] = (_SCHEMA_V1, _SCHEMA_V2, _SCHEMA_V3, _SCHEMA_V4, _SCHEMA_V5, _SCHEMA_V6)
 
 
 def connect(db_path: Path) -> sqlite3.Connection:

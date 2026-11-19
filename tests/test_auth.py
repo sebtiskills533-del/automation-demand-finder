@@ -80,6 +80,46 @@ def test_session_expiry():
     assert auth.session_expired(NOW, NOW + auth.SESSION_LIFETIME + timedelta(seconds=1))
 
 
+# ----------------------------------------------------------- remember me
+
+
+def test_remembered_session_lets_a_refresh_skip_the_password(conn, stored):
+    token = auth.create_remembered_session(conn, stored, NOW)
+    assert len(token) == 43
+    assert auth.check_remembered_session(conn, token, stored, NOW + timedelta(days=13))
+    # Only a fingerprint of the token is stored, never the token itself.
+    saved = conn.execute("SELECT token_hash FROM login_sessions").fetchone()[0]
+    assert token not in saved and len(saved) == 64
+
+
+def test_remembered_session_expires(conn, stored):
+    token = auth.create_remembered_session(conn, stored, NOW)
+    assert not auth.check_remembered_session(conn, token, stored, NOW + auth.REMEMBER_FOR + timedelta(seconds=1))
+
+
+def test_changing_the_password_logs_out_remembered_browsers(conn, stored):
+    token = auth.create_remembered_session(conn, stored, NOW)
+    new_hash = hash_password("a brand new password", n=FAST_N)
+    assert not auth.check_remembered_session(conn, token, new_hash, NOW)
+
+
+def test_logout_ends_the_remembered_session(conn, stored):
+    token = auth.create_remembered_session(conn, stored, NOW)
+    auth.end_remembered_session(conn, token)
+    assert not auth.check_remembered_session(conn, token, stored, NOW)
+
+
+@pytest.mark.parametrize("bad", [None, "", "short", "x" * 43 + "'; DROP", 12345, "<script>" * 6])
+def test_bad_cookie_values_are_rejected(conn, stored, bad):
+    assert auth.check_remembered_session(conn, bad, stored, NOW) is False
+    auth.end_remembered_session(conn, bad)  # never raises
+
+
+def test_forged_token_is_rejected(conn, stored):
+    auth.create_remembered_session(conn, stored, NOW)
+    assert not auth.check_remembered_session(conn, "A" * 43, stored, NOW)
+
+
 # ------------------------------------------------------------ .env writer
 
 

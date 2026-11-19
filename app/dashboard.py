@@ -89,7 +89,7 @@ def main() -> None:
                     title="Settings & costs", icon="⚙️", url_path="settings"),
         ]
         st.navigation(pages).run()
-        logout_button()
+        logout_button(conn)
 
 
 main()
