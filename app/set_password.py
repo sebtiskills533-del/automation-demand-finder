@@ -1,8 +1,9 @@
 """Set (or change) the dashboard password.
 
 Usage:  .venv\\Scripts\\python -m app.set_password
+        .venv\\Scripts\\python -m app.set_password --visible   (if hidden typing doesn't work)
 
-You type the password twice (it is not shown). Only its hash is saved,
+You type the password twice (hidden by default). Only its hash is saved,
 into the DASHBOARD_PASSWORD_HASH line of your .env file.
 """
 
@@ -10,6 +11,7 @@ from __future__ import annotations
 
 import getpass
 import os
+import sys
 import re
 import shutil
 import tempfile
@@ -68,10 +70,20 @@ def set_password(env_path: Path, password: str) -> None:
     write_env_value(env_path, ENV_KEY, hash_password(password))
 
 
-def main() -> int:
-    print("Choose a dashboard password (at least 10 characters). Typing is hidden.")
-    first = getpass.getpass("New password: ")
-    second = getpass.getpass("Type it again: ")
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
+    visible = "--visible" in args
+    if visible:
+        # For terminals where hidden typing doesn't work. Clear the screen afterwards.
+        print("Choose a dashboard password (at least 10 characters). Typing WILL be visible.")
+        ask = input
+    else:
+        print("Choose a dashboard password (at least 10 characters).")
+        print("Typing is hidden on purpose: nothing appears, just type and press Enter.")
+        print("If your keyboard does nothing, run again with:  -m app.set_password --visible")
+        ask = getpass.getpass
+    first = ask("New password: ")
+    second = ask("Type it again: ")
     if first != second:
         print("The two passwords don't match. Nothing was changed.")
         return 1
@@ -81,6 +93,8 @@ def main() -> int:
         print(f"Password not accepted: {exc}")
         return 1
     print(f"Saved. The hash is in {ENV_FILE.relative_to(PROJECT_ROOT)}; restart the dashboard to use it.")
+    if visible:
+        print("Tip: type  cls  and press Enter to clear the password from the screen.")
     return 0
 
 

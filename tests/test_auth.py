@@ -119,6 +119,34 @@ def test_set_password_end_to_end(tmp_path, monkeypatch):
     assert verify_password("a long good password", settings.dashboard_password_hash)
 
 
+@pytest.mark.parametrize("visible", [False, True])
+def test_main_saves_password_hidden_or_visible(tmp_path, monkeypatch, visible):
+    import app.set_password as sp
+
+    env = tmp_path / ".env"
+    monkeypatch.setattr(sp, "ENV_FILE", env)
+    monkeypatch.setattr(sp, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(sp, "hash_password", lambda p: hash_password(p, n=FAST_N))
+    answers = iter(["a long good password", "a long good password"])
+    fake_input = lambda _prompt="": next(answers)  # noqa: E731
+    monkeypatch.setattr("builtins.input", fake_input)
+    monkeypatch.setattr(sp.getpass, "getpass", fake_input)
+
+    assert sp.main(["--visible"] if visible else []) == 0
+    stored = load_settings(env={}, env_file=env).dashboard_password_hash
+    assert verify_password("a long good password", stored)
+
+
+def test_main_rejects_mismatched_passwords(tmp_path, monkeypatch):
+    import app.set_password as sp
+
+    monkeypatch.setattr(sp, "ENV_FILE", tmp_path / ".env")
+    answers = iter(["first password!!", "second password!"])
+    monkeypatch.setattr(sp.getpass, "getpass", lambda _prompt="": next(answers))
+    assert sp.main([]) == 1
+    assert not (tmp_path / ".env").exists()
+
+
 def test_set_password_rejects_weak(tmp_path):
     with pytest.raises(ValueError, match="at least"):
         set_password(tmp_path / ".env", "short")

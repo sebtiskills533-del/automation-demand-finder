@@ -10,10 +10,10 @@ each request, and shows a ranked list you can tick, track and act on.
 2. **Filter** out posts that clearly aren't requests (a free keyword check).
 3. **Analyse** the rest with Claude. Each post gets:
    - a one-line summary, difficulty, best tool and estimated build hours
-   - **seriousness 1â€“5**: how likely this is a real, committed person
-   - **product potential 1â€“5**: how many others probably have the same problem
-   - an **opportunity score 0â€“100** and a verdict: *Work on this / Worth a look / Skip*
-   - a **delivery estimate** (for example "1â€“3 days") using fixed rules with a beginner safety margin
+   - **seriousness 1????????5**: how likely this is a real, committed person
+   - **product potential 1????????5**: how many others probably have the same problem
+   - an **opportunity score 0????????100** and a verdict: *Work on this / Worth a look / Skip*
+   - a **delivery estimate** (for example "1????????3 days") using fixed rules with a beginner safety margin
    - the **allowed contact method** (public reply, a DM only if they asked to hire, and so on)
    - the region, **only if the post states it**
 4. **Review** everything in a password-protected dashboard, with a link to every original post.
@@ -38,7 +38,7 @@ copy .env.example .env
 Open `.env` in VS Code and paste your Anthropic API key after `ANTHROPIC_API_KEY=`.
 Also set a spending limit in the Anthropic Console.
 
-Then choose a dashboard password (it's stored only as a secure hash):
+Then choose a dashboard password (it's stored only as a secure hash). Typing is hidden: nothing appears while you type, which is normal. If your keyboard seems to do nothing, add --visible to the command.
 
 ```powershell
 .venv\Scripts\python -m app.set_password
@@ -50,7 +50,7 @@ Then choose a dashboard password (it's stored only as a secure hash):
 
 | What | Command |
 | --- | --- |
-| Daily job (collect â†’ filter â†’ analyse) | `.venv\Scripts\python run_daily.py` |
+| Daily job (collect ???????? filter ???????? analyse) | `.venv\Scripts\python run_daily.py` |
 | Only collect | `.venv\Scripts\python -m app.collect` |
 | Only filter | `.venv\Scripts\python -m app.prefilter` |
 | Only analyse | `.venv\Scripts\python -m app.analyze` |
@@ -72,8 +72,8 @@ $trigger = New-ScheduledTaskTrigger -Daily -At 7am
 Register-ScheduledTask -TaskName "Automation Demand Finder" -Action $action -Trigger $trigger -Description "Daily collect, filter and analyse"
 ```
 
-To check it: open **Task Scheduler** â†’ *Task Scheduler Library* â†’ *Automation
-Demand Finder* â†’ right-click â†’ **Run**. To remove it:
+To check it: open **Task Scheduler** ???????? *Task Scheduler Library* ???????? *Automation
+Demand Finder* ???????? right-click ???????? **Run**. To remove it:
 `Unregister-ScheduledTask -TaskName "Automation Demand Finder"`.
 
 Logs from every run are in `logs/app.log`.
@@ -85,7 +85,7 @@ Logs from every run are in `logs/app.log`.
 | `.env` | API key, password hash, `MAX_POSTS_PER_RUN`, `MONTHLY_BUDGET_USD`, `USD_TO_INR`, `REDDIT_USERNAME`, `LOG_LEVEL` |
 | `config/sources.json` | Which subreddits and Hacker News searches to read |
 | `config/phrases.txt` | Keywords that make a post count as a request |
-| `config/models.json` | The Claude models (levels 1â€“4) and their prices |
+| `config/models.json` | The Claude models (levels 1????????4) and their prices |
 
 In the dashboard's **Settings & costs** page you can pick which Claude model
 does the analysis and see this month's spending. The default is Level 1
