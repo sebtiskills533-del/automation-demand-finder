@@ -4,15 +4,22 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import subprocess
+import sys
+from datetime import timedelta
 
 import streamlit as st
 
+from app import store
 from app.analyze import analyze_pending
 from app.cli import build_llm
-from app.config import Settings
+from app.config import PROJECT_ROOT, Settings
 from app.errors import AppError
 from app.importer import TEMPLATE_CSV, ImportReport, decode_upload, import_rows, import_text
 from app.models_registry import ModelRegistry
+from app.domain import utc_now
+from app.muse.browser import STALE_LOCK_SECONDS, open_for_setup
+from app.muse.job import MAX_FOCUS_CHARS, clean_focus
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +54,8 @@ def render(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry
 
     st.divider()
     _rate_now(conn, settings, registry)
+    st.divider()
+    _muse_section(conn, settings)
     _agent_help()
 
 
@@ -121,6 +130,74 @@ def _rate_now(conn: sqlite3.Connection, settings: Settings, registry: ModelRegis
     )
     if report.stopped_reason:
         st.warning(report.stopped_reason)
+
+
+def _muse_section(conn: sqlite3.Connection, settings: Settings) -> None:
+    st.subheader("Collect with Muse")
+    muse = settings.muse
+    if not muse.enabled:
+        st.info(
+            "Muse collection is switched off. To use it, set MUSE_ENABLED=true in .env "
+            "and follow the 'Muse' section of the README."
+        )
+        return
+
+    st.caption(
+        f'The app opens its own Chrome (port {muse.browser_port}), types a job into your Muse side chat '
+        f'"{muse.chat_name}", waits for the answer (up to 30 minutes), imports up to {muse.max_posts} '
+        "posts and rates them. You can watch it work in that Chrome window."
+    )
+    c1, c2 = st.columns(2)
+    if c1.button("Open the Muse Chrome (log in / set up)"):
+        try:
+            open_for_setup(muse)
+            st.success("The Muse Chrome is opening. Log in to muse.ai there; it remembers you.")
+        except AppError as exc:
+            st.error(str(exc))
+
+    focus = st.text_input("What should Muse look for? (optional)", max_chars=MAX_FOCUS_CHARS,
+                          placeholder="e.g. Etsy sellers and Google Sheets")
+    store.fail_stale_muse_runs(conn, utc_now() - timedelta(seconds=STALE_LOCK_SECONDS))
+    running = any(r["status"] == "running" for r in store.recent_muse_runs(conn, 3))
+    if c2.button("Start Muse collection", type="primary", disabled=running):
+        try:
+            start_background_run(clean_focus(focus))
+            st.success("Started. It can take up to 30 minutes. Click 'Refresh' below to see progress.")
+        except (AppError, OSError) as exc:
+            st.error(f"Could not start: {exc}")
+    if running:
+        st.info("A Muse run is in progress.")
+
+    runs = store.recent_muse_runs(conn, 5)
+    if st.button("Refresh"):
+        st.rerun()
+    if runs:
+        st.dataframe(
+            [
+                {
+                    "Started": r["started_at"].replace("T", " ").rstrip("Z"),
+                    "Status": r["status"],
+                    "Added": r["added"],
+                    "Rated": r["rated"],
+                    "Result": r["message"],
+                    "Muse chat": r["chat_url"] or None,
+                }
+                for r in runs
+            ],
+            hide_index=True,
+            column_config={"Muse chat": st.column_config.LinkColumn(display_text="Open ↗")},
+        )
+
+
+def start_background_run(focus: str) -> None:
+    """Run `python -m app.muse run` as its own process so the dashboard stays responsive."""
+    args = [sys.executable, "-m", "app.muse", "run"]
+    if focus:
+        args += ["--focus", focus]  # an argument list: no shell, so no injection
+    options: dict = {"cwd": PROJECT_ROOT, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    if sys.platform == "win32":
+        options["creationflags"] = subprocess.CREATE_NO_WINDOW
+    subprocess.Popen(args, **options)  # noqa: S603
 
 
 def _agent_help() -> None:

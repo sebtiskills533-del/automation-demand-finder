@@ -350,6 +350,59 @@ def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
         )
 
 
+# ------------------------------------------------------------ muse runs
+
+
+def start_muse_run(conn: sqlite3.Connection, focus: str) -> int:
+    with transaction(conn):
+        cursor = conn.execute(
+            "INSERT INTO muse_runs (started_at, status, focus) VALUES (?, 'running', ?)",
+            (to_iso(utc_now()), focus),
+        )
+    return int(cursor.lastrowid)
+
+
+def finish_muse_run(
+    conn: sqlite3.Connection,
+    run_id: int,
+    *,
+    ok: bool,
+    message: str,
+    added: int = 0,
+    duplicates: int = 0,
+    skipped: int = 0,
+    rated: int = 0,
+    chat_url: str = "",
+) -> None:
+    with transaction(conn):
+        conn.execute(
+            """UPDATE muse_runs SET finished_at = ?, status = ?, message = ?, added = ?,
+                   duplicates = ?, skipped = ?, rated = ?, chat_url = ?
+               WHERE id = ?""",
+            (to_iso(utc_now()), "ok" if ok else "failed", message[:1000], added, duplicates,
+             skipped, rated, chat_url[:500], run_id),
+        )
+
+
+def fail_stale_muse_runs(conn: sqlite3.Connection, older_than: datetime) -> int:
+    """Runs still 'running' after the time limit were interrupted (closed window, crash)."""
+    with transaction(conn):
+        cursor = conn.execute(
+            """UPDATE muse_runs SET status = 'failed', finished_at = ?,
+                   message = 'Interrupted: the run stopped without finishing.'
+               WHERE status = 'running' AND started_at < ?""",
+            (to_iso(utc_now()), to_iso(older_than)),
+        )
+    return cursor.rowcount
+
+
+def recent_muse_runs(conn: sqlite3.Connection, limit: int = 10) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM muse_runs ORDER BY started_at DESC, id DESC LIMIT ?", (limit,)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 # --------------------------------------------------------------- logins
 
 

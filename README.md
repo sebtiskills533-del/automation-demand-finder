@@ -135,6 +135,34 @@ assistant (such as Muse) to turn posts you have open into this CSV format.
 Those platforms forbid automated collection, and an agent using your logged-in
 accounts can get them banned, so keep it small and manual.
 
+### Collect with Muse (optional, automated)
+
+The app can drive **Muse** (Meta's AI agent at muse.ai) the same way the
+SavorFable Autopilot app does: in its **own Chrome** (own profile, port 9223,
+listening on this computer only), it types a job into a Muse side chat, waits
+for the reply (it is finished after 60 s without new text, at most 30 min),
+imports the posts and rates them. Muse has no API, so this is browser
+automation: muse.ai, Facebook, Instagram and Quora may consider it against
+their terms. It only runs when you click, one job at a time, 20 posts at most.
+
+One-time setup:
+
+1. In `.env` set `MUSE_ENABLED=true` (and `CHROME_PATH` if Chrome is installed elsewhere).
+2. Dashboard → **Import posts** → **Open the Muse Chrome**, and log in to muse.ai
+   in that window. It remembers you.
+3. In Muse, create a **side chat** named exactly `AUTOMATION DEMAND FINDER`
+   and paste the whole of [`docs/muse-finder-procedure.md`](docs/muse-finder-procedure.md) into it once.
+4. Muse must be able to see Facebook, Instagram and Quora (log in to them in
+   that Chrome if Muse asks).
+
+Then: **Import posts → Start Muse collection** (optionally type a focus such as
+"Etsy sellers and Google Sheets"). Watch the first run in the Muse Chrome.
+Results and any problem appear in the table under the button. Command line:
+`.venv\Scripts\python -m app.muse run --focus "Etsy sellers"`.
+
+If muse.ai changes its page and runs start failing, the page selectors are
+all in `app/muse/selectors.py`.
+
 ## 6. How the code is organised
 
 ```
@@ -145,6 +173,7 @@ app/
   http_client.py      polite HTTP: 2 s between requests, retries, clear User-Agent
   sources/            Reddit RSS, Hacker News, Stack Exchange and Discourse forum readers
   importer.py         import posts from CSV / JSON / the dashboard form
+  muse/               optional Muse collection (Chrome over CDP, chat driving, reply parsing)
   collect.py          step 1    prefilter.py  step 2    analyze.py  step 3
   llm.py              the only code that calls Claude (structured JSON, cost logging)
   models_registry.py  model levels, prices, model per task

@@ -11,6 +11,10 @@ password-protected Streamlit dashboard on the user's own computer.
 - Never store emails or phone numbers: run text through
   `app.privacy.strip_contact_details` before saving.
 - Nothing is ever posted or sent automatically. Every AI output is a draft.
+- Muse (app/muse/) is the one exception to "official APIs only": the user chose it,
+  knowing the terms-of-service risk. Keep it opt-in (MUSE_ENABLED), started only
+  by the user, one job at a time (BrowserLock), small batches, read-only
+  instructions to Muse, and its own Chrome on port 9223 (never 9222).
 - Secrets live in `.env` only (never in code, never committed).
 - All SQL uses `?` placeholders. Never format user input into SQL.
 - Never render post text as HTML or Markdown in the dashboard (XSS):
@@ -31,6 +35,8 @@ app/
   http_client.py      polite HTTP client (rate limit, retries, UA)
   sources/            Reddit RSS, Hacker News (Ask HN), Stack Exchange and Discourse fetchers
   importer.py         import user-supplied posts (CSV/JSON/form); skips the keyword filter
+  muse/               optional Muse collection: browser.py (Chrome/CDP/lock), client.py
+                      (chat driving), parse.py (reply format), job.py (run), selectors.py
   collect.py          step 1: collect posts
   prefilter.py        step 2: keyword filter
   models_registry.py  Claude models, levels, prices, per-task choice

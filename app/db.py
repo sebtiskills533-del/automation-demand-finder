@@ -89,7 +89,24 @@ CREATE TABLE login_attempts (
 CREATE INDEX idx_login_attempts_time ON login_attempts (attempted_at);
 """
 
-MIGRATIONS: tuple[str, ...] = (_SCHEMA_V1,)
+_SCHEMA_V2 = """
+CREATE TABLE muse_runs (
+    id          INTEGER PRIMARY KEY,
+    started_at  TEXT NOT NULL,
+    finished_at TEXT,
+    status      TEXT NOT NULL CHECK (status IN ('running', 'ok', 'failed')),
+    focus       TEXT NOT NULL DEFAULT '',
+    message     TEXT NOT NULL DEFAULT '',
+    added       INTEGER NOT NULL DEFAULT 0,
+    duplicates  INTEGER NOT NULL DEFAULT 0,
+    skipped     INTEGER NOT NULL DEFAULT 0,
+    rated       INTEGER NOT NULL DEFAULT 0,
+    chat_url    TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX idx_muse_runs_started ON muse_runs (started_at DESC);
+"""
+
+MIGRATIONS: tuple[str, ...] = (_SCHEMA_V1, _SCHEMA_V2)
 
 
 def connect(db_path: Path) -> sqlite3.Connection:

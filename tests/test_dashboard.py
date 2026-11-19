@@ -207,6 +207,51 @@ def test_import_page_rate_now_shows_missing_key(env, monkeypatch):
     assert any("ANTHROPIC_API_KEY" in e.value for e in at.error)
 
 
+def test_import_page_muse_section_off_by_default(env):
+    at = AppTest.from_function(_import_page_app, default_timeout=TIMEOUT).run()
+    assert any("Muse collection is switched off" in i.value for i in at.info)
+    assert not any(b.label == "Start Muse collection" for b in at.button)
+
+
+def test_import_page_muse_start_runs_in_background(env, monkeypatch):
+    from app.ui import import_page
+
+    monkeypatch.setenv("MUSE_ENABLED", "true")
+    started = []
+    monkeypatch.setattr(import_page, "start_background_run", lambda focus: started.append(focus))
+    at = AppTest.from_function(_import_page_app, default_timeout=TIMEOUT).run()
+    _by_label(at.text_input, "What should Muse look for").input("Etsy sellers")
+    at = _click(at, "Start Muse collection")
+    assert not at.exception
+    assert started == ["Etsy sellers"]
+    assert any("Started" in s.value for s in at.success)
+
+
+def test_import_page_shows_muse_runs_and_blocks_double_start(env, monkeypatch):
+    monkeypatch.setenv("MUSE_ENABLED", "true")
+    with db.open_db(env) as conn:
+        done = store.start_muse_run(conn, "")
+        store.finish_muse_run(conn, done, ok=True, message="Import: 3 added.", added=3)
+        store.start_muse_run(conn, "")  # still running
+    at = AppTest.from_function(_import_page_app, default_timeout=TIMEOUT).run()
+    assert not at.exception
+    assert _by_label(at.button, "Start Muse collection").disabled
+    assert any("in progress" in i.value for i in at.info)
+    assert len(at.dataframe) == 1
+
+
+def test_start_background_run_uses_argument_list(monkeypatch):
+    from app.ui import import_page
+
+    calls = []
+    monkeypatch.setattr(import_page.subprocess, "Popen", lambda args, **kw: calls.append((args, kw)))
+    import_page.start_background_run('Etsy"; rm -rf /')
+    args, options = calls[0]
+    assert args[1:4] == ["-m", "app.muse", "run"]
+    assert args[-1] == 'Etsy"; rm -rf /'  # passed as one argument, never through a shell
+    assert "shell" not in options
+
+
 def test_settings_page_lists_all_models_and_saves_choice(env):
     # AppTest can't switch to function-based pages, so render the page directly.
     with db.open_db(env) as conn:

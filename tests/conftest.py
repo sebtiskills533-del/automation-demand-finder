@@ -23,6 +23,23 @@ def _block_network(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(requests.Session, "request", refuse)
 
 
+_APP_ENV_VARS = (
+    "ANTHROPIC_API_KEY", "DASHBOARD_PASSWORD_HASH", "MAX_POSTS_PER_RUN", "MONTHLY_BUDGET_USD",
+    "USD_TO_INR", "REDDIT_USERNAME", "LOG_LEVEL", "DB_PATH", "LOG_DIR", "MUSE_ENABLED", "MUSE_CHAT",
+    "MUSE_MAX_POSTS", "MUSE_BROWSER_PORT", "MUSE_PROFILE_DIR", "CHROME_PATH",
+)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_from_real_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests never read the user's real .env (API key, password, Muse switch...)."""
+    from app import config
+
+    monkeypatch.setattr(config, "ENV_FILE", tmp_path / "isolated.env")  # does not exist
+    for name in _APP_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture
 def settings(tmp_path: Path) -> Settings:
     return load_settings(

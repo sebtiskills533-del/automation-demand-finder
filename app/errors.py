@@ -39,3 +39,31 @@ class LLMTemporaryError(LLMError):
 
 class LLMOutputError(LLMError):
     """Claude answered, but the answer was unusable (refused, cut off, or invalid)."""
+
+
+class MuseError(AppError):
+    """Base class for problems with the Muse (muse.ai) browser automation."""
+
+
+class MuseBusyError(MuseError):
+    """Another Muse job is already using the app's Chrome."""
+
+
+class MuseBrowserError(MuseError):
+    """The app's Chrome could not be started or reached."""
+
+
+class MuseLoggedOutError(MuseError):
+    """muse.ai is not logged in inside the app's Chrome profile."""
+
+
+class MuseChatNotFoundError(MuseError):
+    """The named Muse side chat doesn't exist."""
+
+
+class MuseTimeoutError(MuseError):
+    """Muse's reply did not finish in time."""
+
+
+class MuseReplyError(MuseError):
+    """Muse finished, but its reply couldn't be used (or it reported a PROBLEM)."""

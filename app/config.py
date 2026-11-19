@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import dotenv_values
@@ -18,6 +18,21 @@ DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "finder.db"
 DEFAULT_LOG_DIR = PROJECT_ROOT / "logs"
 
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
+DEFAULT_CHROME_PATH = Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe")
+DEFAULT_MUSE_PROFILE = PROJECT_ROOT / "data" / "muse-browser-profile"
+
+
+@dataclass(frozen=True)
+class MuseSettings:
+    """Optional Muse (muse.ai) collection through a dedicated Chrome. Off by default."""
+
+    enabled: bool = False
+    chat_name: str = "AUTOMATION DEMAND FINDER"
+    max_posts: int = 20
+    chrome_path: Path = DEFAULT_CHROME_PATH
+    # 9223, not 9222, so it never touches another app's automation Chrome.
+    browser_port: int = 9223
+    profile_dir: Path = DEFAULT_MUSE_PROFILE
 
 
 @dataclass(frozen=True)
@@ -36,16 +51,22 @@ class Settings:
     sources_file: Path
     phrases_file: Path
     models_file: Path
+    muse: MuseSettings = field(default_factory=MuseSettings)
+
+
+_DEFAULT_ENV_FILE = object()  # "use ENV_FILE", looked up when called (tests can redirect it)
 
 
 def load_settings(
     env: Mapping[str, str] | None = None,
-    env_file: Path | None = ENV_FILE,
+    env_file: Path | None | object = _DEFAULT_ENV_FILE,
 ) -> Settings:
     """Read settings, with real environment variables overriding the .env file.
 
     Pass `env` (and `env_file=None`) in tests to avoid touching the real files.
     """
+    if env_file is _DEFAULT_ENV_FILE:
+        env_file = ENV_FILE
     values: dict[str, str] = {}
     if env_file is not None and env_file.exists():
         values.update({k: v for k, v in dotenv_values(env_file).items() if v is not None})
@@ -64,6 +85,14 @@ def load_settings(
         sources_file=CONFIG_DIR / "sources.json",
         phrases_file=CONFIG_DIR / "phrases.txt",
         models_file=CONFIG_DIR / "models.json",
+        muse=MuseSettings(
+            enabled=_bool_setting(values, "MUSE_ENABLED", False),
+            chat_name=_muse_chat_name(values.get("MUSE_CHAT", "")),
+            max_posts=_int_setting(values, "MUSE_MAX_POSTS", 20, 1, 50),
+            chrome_path=Path(values.get("CHROME_PATH") or DEFAULT_CHROME_PATH),
+            browser_port=_int_setting(values, "MUSE_BROWSER_PORT", 9223, 1024, 65535),
+            profile_dir=Path(values.get("MUSE_PROFILE_DIR") or DEFAULT_MUSE_PROFILE),
+        ),
     )
 
 
@@ -103,6 +132,24 @@ def _float_setting(
     if not low <= number <= high:
         raise ConfigError(f"{name} must be between {low} and {high}, got {number}.")
     return number
+
+
+def _bool_setting(values: Mapping[str, str], name: str, default: bool) -> bool:
+    raw = (values.get(name) or "").strip().lower()
+    if not raw:
+        return default
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    if raw in ("0", "false", "no", "off"):
+        return False
+    raise ConfigError(f"{name} must be true or false, got {raw!r}.")
+
+
+def _muse_chat_name(raw: str) -> str:
+    name = (raw or "").strip() or MuseSettings.chat_name
+    if len(name) > 60 or any(ord(c) < 32 for c in name):
+        raise ConfigError("MUSE_CHAT must be a chat name of at most 60 characters.")
+    return name
 
 
 def _log_level(raw: str) -> str:
