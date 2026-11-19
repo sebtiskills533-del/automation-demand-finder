@@ -16,6 +16,11 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 import streamlit as st  # noqa: E402
 
+from app.codeguard import code_fingerprint, refresh_if_code_changed  # noqa: E402
+
+# After an update, re-import every app module instead of mixing old and new code.
+refresh_if_code_changed(_PROJECT_ROOT / "app")
+
 from app import config, db  # noqa: E402
 from app.config import Settings, load_settings  # noqa: E402
 from app.errors import AppError  # noqa: E402
@@ -26,21 +31,22 @@ from app.ui.components import apply_page_style  # noqa: E402
 from app.ui.login import logout_button, require_login  # noqa: E402
 
 
-def _config_version() -> tuple[float, float]:
-    """Last-changed times of .env and models.json. When either file changes
-    (for example a new password), the cached settings below are reloaded."""
+def _config_version() -> tuple[float, float, float]:
+    """Last-changed times of .env, models.json and the app code. When any of them
+    changes (for example a new password or an update), cached settings are reloaded."""
     def mtime(path) -> float:
         try:
             return path.stat().st_mtime
         except FileNotFoundError:
             return 0.0
 
-    return mtime(config.ENV_FILE), mtime(config.CONFIG_DIR / "models.json")
+    return (mtime(config.ENV_FILE), mtime(config.CONFIG_DIR / "models.json"),
+            code_fingerprint(_PROJECT_ROOT / "app"))
 
 
 @st.cache_resource(show_spinner=False, max_entries=1)
-def _load_config(version: tuple[float, float]) -> tuple[Settings, ModelRegistry]:
-    """Read settings; `version` changes whenever .env or models.json is edited."""
+def _load_config(version: tuple[float, float, float]) -> tuple[Settings, ModelRegistry]:
+    """Read settings; `version` changes whenever .env, models.json or the code changes."""
     settings = load_settings(env_file=config.ENV_FILE)
     setup_logging(settings.log_dir, settings.log_level)
     return settings, load_registry(settings.models_file)
