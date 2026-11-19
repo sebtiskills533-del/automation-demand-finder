@@ -19,6 +19,11 @@ def contact_method(platform: str, wants_to_hire: bool, shares_own_website: bool)
         raise ValueError(f"Unknown platform {platform!r}")
     note = _FORUM_NOTE if platform == "forum" else ""
 
+    if platform == "stackexchange":
+        # No private messages, and answers that advertise services get deleted.
+        return "Post a genuinely helpful answer on Stack Exchange (no self-promotion allowed there)"
+    if platform == "web":
+        return "Only if the page itself offers a public reply or contact form; otherwise skip"
     if wants_to_hire:
         if platform == "hackernews":
             # Hacker News has no private messages.

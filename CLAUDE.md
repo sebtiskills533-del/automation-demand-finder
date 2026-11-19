@@ -29,7 +29,8 @@ app/
   privacy.py          strips emails / phone numbers
   html_text.py        HTML -> plain text
   http_client.py      polite HTTP client (rate limit, retries, UA)
-  sources/            Reddit RSS, Hacker News (Ask HN) and Discourse forum fetchers
+  sources/            Reddit RSS, Hacker News (Ask HN), Stack Exchange and Discourse fetchers
+  importer.py         import user-supplied posts (CSV/JSON/form); skips the keyword filter
   collect.py          step 1: collect posts
   prefilter.py        step 2: keyword filter
   models_registry.py  Claude models, levels, prices, per-task choice

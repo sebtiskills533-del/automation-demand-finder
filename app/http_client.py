@@ -76,6 +76,14 @@ class PoliteHttpClient:
 
         raise SourceFetchError(f"{url} failed after {self._max_retries + 1} tries: {last_problem}")
 
+    def pause(self, seconds: float) -> None:
+        """Wait before the next request, when a site asks us to back off."""
+        seconds = min(max(seconds, 0.0), _MAX_RETRY_AFTER_SECONDS)
+        if seconds:
+            log.info("Backing off for %.0f s as the site asked", seconds)
+            self._sleep(seconds)
+            self._last_request_at = self._clock()
+
     def _wait_for_turn(self) -> None:
         now = self._clock()
         if self._last_request_at is not None:

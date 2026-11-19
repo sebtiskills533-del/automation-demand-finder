@@ -98,8 +98,17 @@ def test_contact_on_forums_warns_about_rules():
     assert "rules" in contact_method("forum", True, False)
 
 
+def test_contact_stackexchange_and_unknown_websites():
+    assert "no self-promotion" in contact_method("stackexchange", True, False)
+    assert contact_method("web", False, False).endswith("otherwise skip")
+    assert contact_method("facebook", True, False).startswith("Direct message on Facebook")
+    assert contact_method("quora", False, False).startswith("Public reply under the post on Quora")
+
+
 def test_contact_never_suggests_email_or_phone():
-    for platform in ("reddit", "hackernews", "forum"):
+    from app.domain import PLATFORM_NAMES
+
+    for platform in PLATFORM_NAMES:
         for hire in (True, False):
             for site in (True, False):
                 text = contact_method(platform, hire, site).lower()

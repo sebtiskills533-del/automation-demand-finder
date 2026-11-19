@@ -7,14 +7,16 @@ each request, and shows a ranked list you can tick, track and act on.
 **What it does every day**
 
 1. **Collect** new public posts from Ask HN, the n8n and Make community forums
-   (official Discourse feeds) and subreddit feeds (Reddit needs API approval).
+   (official Discourse feeds), Stack Exchange (official API) and subreddit feeds
+   (Reddit needs API approval). You can also **import** posts you found anywhere
+   else (Facebook, Instagram, Quora...): see section 5.
 2. **Filter** out posts that clearly aren't requests (a free keyword check).
 3. **Analyse** the rest with Claude. Each post gets:
    - a one-line summary, difficulty, best tool and estimated build hours
-   - **seriousness 1â€“5**: how likely this is a real, committed person
-   - **product potential 1â€“5**: how many others probably have the same problem
-   - an **opportunity score 0â€“100** and a verdict: *Work on this / Worth a look / Skip*
-   - a **delivery estimate** (for example "1â€“3 days") using fixed rules with a beginner safety margin
+   - **seriousness 1–5**: how likely this is a real, committed person
+   - **product potential 1–5**: how many others probably have the same problem
+   - an **opportunity score 0–100** and a verdict: *Work on this / Worth a look / Skip*
+   - a **delivery estimate** (for example "1–3 days") using fixed rules with a beginner safety margin
    - the **allowed contact method** (public reply, a DM only if they asked to hire, and so on)
    - the region, **only if the post states it**
 4. **Review** everything in a password-protected dashboard, with a link to every original post.
@@ -51,7 +53,7 @@ Then choose a dashboard password (it's stored only as a secure hash). Typing is 
 
 | What | Command |
 | --- | --- |
-| Daily job (collect â†’ filter â†’ analyse) | `.venv\Scripts\python run_daily.py` |
+| Daily job (collect → filter → analyse) | `.venv\Scripts\python run_daily.py` |
 | Only collect | `.venv\Scripts\python -m app.collect` |
 | Only filter | `.venv\Scripts\python -m app.prefilter` |
 | Only analyse | `.venv\Scripts\python -m app.analyze` |
@@ -73,8 +75,8 @@ $trigger = New-ScheduledTaskTrigger -Daily -At 7am
 Register-ScheduledTask -TaskName "Automation Demand Finder" -Action $action -Trigger $trigger -Description "Daily collect, filter and analyse"
 ```
 
-To check it: open **Task Scheduler** â†’ *Task Scheduler Library* â†’ *Automation
-Demand Finder* â†’ right-click â†’ **Run**. To remove it:
+To check it: open **Task Scheduler** → *Task Scheduler Library* → *Automation
+Demand Finder* → right-click → **Run**. To remove it:
 `Unregister-ScheduledTask -TaskName "Automation Demand Finder"`.
 
 Logs from every run are in `logs/app.log`.
@@ -86,7 +88,7 @@ Logs from every run are in `logs/app.log`.
 | `.env` | API key, password hash, `MAX_POSTS_PER_RUN`, `MONTHLY_BUDGET_USD`, `USD_TO_INR`, `REDDIT_USERNAME`, `LOG_LEVEL` |
 | `config/sources.json` | Which subreddits, Hacker News searches (`ask_hn` or `story`) and Discourse forums to read; `skip_categories` drops showcase/news/"offer help" topics |
 | `config/phrases.txt` | Keywords that make a post count as a request |
-| `config/models.json` | The Claude models (levels 1â€“4) and their prices |
+| `config/models.json` | The Claude models (levels 1–4) and their prices |
 
 In the dashboard's **Settings & costs** page you can pick which Claude model
 does the analysis and see this month's spending. The default is Level 1
@@ -103,7 +105,27 @@ does the analysis and see this month's spending. The default is Level 1
 run stops when `MONTHLY_BUDGET_USD` is reached, and every call's tokens and
 cost are logged.
 
-## 5. How the code is organised
+## 5. Importing posts from other platforms
+
+Facebook, Instagram and Quora have no official way for apps to read posts, so
+the app doesn't collect from them. Instead, when you find a good request there,
+bring it in yourself and the app rates it like everything else:
+
+- **Dashboard → Import posts → Add one post:** paste the link, title and text.
+- **Upload a file / Paste CSV or JSON** with the columns
+  `url,title,text,source,author,posted_at` (only `url` and `title` are required).
+  A template is downloadable on that page.
+- **Command line:** `.venv\Scripts\python -m app.importer my_posts.csv`
+
+Then click **Rate new posts now** (or wait for the daily run). Emails and phone
+numbers are removed, and the same link is never imported twice.
+
+The Import page also has a ready-made instruction you can give an AI browser
+assistant (such as Muse) to turn posts you have open into this CSV format.
+Those platforms forbid automated collection, and an agent using your logged-in
+accounts can get them banned, so keep it small and manual.
+
+## 6. How the code is organised
 
 ```
 app/
@@ -111,7 +133,8 @@ app/
   db.py / store.py    SQLite schema + every query (safe placeholders only)
   privacy.py          removes emails and phone numbers
   http_client.py      polite HTTP: 2 s between requests, retries, clear User-Agent
-  sources/            Reddit RSS, Hacker News and Discourse forum readers
+  sources/            Reddit RSS, Hacker News, Stack Exchange and Discourse forum readers
+  importer.py         import posts from CSV / JSON / the dashboard form
   collect.py          step 1    prefilter.py  step 2    analyze.py  step 3
   llm.py              the only code that calls Claude (structured JSON, cost logging)
   models_registry.py  model levels, prices, model per task
@@ -126,7 +149,7 @@ tests/                automated tests (no internet or real API calls needed)
 
 Data lives in `data/finder.db` (one file). Delete it to start fresh.
 
-## 6. Updating
+## 7. Updating
 
 ```powershell
 git pull

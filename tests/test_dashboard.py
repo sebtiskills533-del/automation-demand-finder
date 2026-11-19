@@ -111,6 +111,81 @@ def _settings_page_app():
         settings_page.render(conn, settings, load_registry(settings.models_file))
 
 
+def _import_page_app():
+    from app import db
+    from app.config import load_settings
+    from app.models_registry import load_registry
+    from app.ui import import_page
+
+    settings = load_settings()
+    with db.open_db(settings.db_path) as conn:
+        import_page.render(conn, settings, load_registry(settings.models_file))
+
+
+def _by_label(widgets, prefix):
+    return next(w for w in widgets if w.label.startswith(prefix))
+
+
+def _click(at, label):
+    _by_label(at.button, label).click()
+    return at.run()
+
+
+def test_import_page_add_one_post(env):
+    at = AppTest.from_function(_import_page_app, default_timeout=TIMEOUT).run()
+    assert not at.exception
+    _by_label(at.text_input, "Link to the post").input("https://www.facebook.com/groups/x/posts/9")
+    _by_label(at.text_input, "Title").input("Need orders copied to Google Sheets")
+    _by_label(at.text_area, "Post text").input("Call me on 555-123-4567")
+    at = _click(at, "Add post")
+    assert not at.exception
+    assert any("1 added" in s.value for s in at.success)
+    with db.open_db(env) as conn:
+        row = conn.execute("SELECT platform, body, passed_filter FROM posts").fetchone()
+    assert tuple(row) == ("facebook", "Call me on [phone removed]", 1)
+
+
+def test_import_page_paste_reports_bad_rows(env):
+    at = AppTest.from_function(_import_page_app, default_timeout=TIMEOUT).run()
+    _by_label(at.text_area, "Paste CSV").input(
+        "url,title\nhttps://www.quora.com/q1,How to automate invoices\nnot-a-link,Bad row\n"
+    )
+    at = _click(at, "Import")
+    assert any("1 added" in w.value and "1 skipped" in w.value for w in at.warning)
+    assert any("Row 2: url must be a full https:// link" in t.value for t in at.text)
+
+
+def test_import_page_rate_now_uses_claude(env, monkeypatch):
+    from app import store as store_module
+    from app.llm import ClaudeClient
+    from app.ui import import_page
+    from tests.fakes import FakeAnthropic, fake_message
+    from tests.test_analyze import GOOD
+
+    def fake_llm(settings, conn):
+        sink = lambda t, m, i, o, c: store_module.log_usage(conn, t, m, i, o, c)  # noqa: E731
+        return ClaudeClient("key", sink, client=FakeAnthropic(fake_message(GOOD)))
+
+    monkeypatch.setattr(import_page, "build_llm", fake_llm)
+    with db.open_db(env) as conn:
+        from app.importer import import_rows
+
+        import_rows(conn, [{"url": "https://www.quora.com/q1", "title": "How to automate invoices"}])
+    at = AppTest.from_function(_import_page_app, default_timeout=TIMEOUT).run()
+    at = _click(at, "Rate new posts now")
+    assert not at.exception
+    assert any("Rated 1 posts" in s.value for s in at.success)
+    with db.open_db(env) as conn:
+        assert store.count_posts(conn)["analyzed"] == 1
+
+
+def test_import_page_rate_now_shows_missing_key(env, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    at = AppTest.from_function(_import_page_app, default_timeout=TIMEOUT).run()
+    at = _click(at, "Rate new posts now")
+    assert any("ANTHROPIC_API_KEY" in e.value for e in at.error)
+
+
 def test_settings_page_lists_all_models_and_saves_choice(env):
     # AppTest can't switch to function-based pages, so render the page directly.
     with db.open_db(env) as conn:

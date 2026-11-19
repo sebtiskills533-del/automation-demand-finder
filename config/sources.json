@@ -9,6 +9,12 @@
     "lookback_hours": 168,
     "hits_per_query": 50
   },
+  "stackexchange": {
+    "sites": ["stackoverflow", "webapps", "superuser"],
+    "queries": ["automate", "google sheets"],
+    "lookback_hours": 720,
+    "page_size": 50
+  },
   "forums": [
     {
       "name": "n8n community",

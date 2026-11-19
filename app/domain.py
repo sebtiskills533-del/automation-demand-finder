@@ -6,7 +6,44 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 # Where a post came from. The keys are stored in the database.
-PLATFORM_NAMES = {"reddit": "Reddit", "hackernews": "Hacker News", "forum": "the community forum"}
+PLATFORM_NAMES = {
+    "reddit": "Reddit",
+    "hackernews": "Hacker News",
+    "forum": "the community forum",
+    "stackexchange": "Stack Exchange",
+    # Platforms that only arrive through the import feature:
+    "facebook": "Facebook",
+    "instagram": "Instagram",
+    "quora": "Quora",
+    "linkedin": "LinkedIn",
+    "x": "X (Twitter)",
+    "web": "the website",
+}
+
+# Website address -> platform, used for imported posts.
+_HOST_PLATFORMS = {
+    "reddit.com": "reddit",
+    "news.ycombinator.com": "hackernews",
+    "facebook.com": "facebook",
+    "fb.com": "facebook",
+    "instagram.com": "instagram",
+    "quora.com": "quora",
+    "linkedin.com": "linkedin",
+    "x.com": "x",
+    "twitter.com": "x",
+    "stackexchange.com": "stackexchange",
+    "stackoverflow.com": "stackexchange",
+    "superuser.com": "stackexchange",
+}
+
+
+def platform_for_host(host: str) -> str:
+    """'www.facebook.com' -> 'facebook'; unknown sites -> 'web'."""
+    host = host.lower().rstrip(".")
+    for domain, platform in _HOST_PLATFORMS.items():
+        if host == domain or host.endswith("." + domain):
+            return platform
+    return "web"
 
 DIFFICULTIES = ("low", "medium", "high")
 

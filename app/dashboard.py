@@ -21,7 +21,7 @@ from app.config import Settings, load_settings  # noqa: E402
 from app.errors import AppError  # noqa: E402
 from app.logging_setup import setup_logging  # noqa: E402
 from app.models_registry import ModelRegistry, load_registry  # noqa: E402
-from app.ui import opportunities, settings_page  # noqa: E402
+from app.ui import import_page, opportunities, settings_page  # noqa: E402
 from app.ui.login import require_login  # noqa: E402
 
 
@@ -47,6 +47,8 @@ def main() -> None:
         pages = [
             st.Page(lambda: opportunities.render(conn, settings.db_path),
                     title="Opportunities", icon="🎯", url_path="opportunities", default=True),
+            st.Page(lambda: import_page.render(conn, settings, registry),
+                    title="Import posts", icon="📥", url_path="import"),
             st.Page(lambda: settings_page.render(conn, settings, registry),
                     title="Settings & costs", icon="⚙️", url_path="settings"),
         ]

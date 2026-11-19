@@ -5,7 +5,7 @@ import pytest
 
 from app.errors import ConfigError, SourceFetchError
 from app.http_client import PoliteHttpClient
-from app.sources import DiscourseSource, HackerNewsSource, RedditSource, load_sources
+from app.sources import DiscourseSource, HackerNewsSource, RedditSource, StackExchangeSource, load_sources
 from tests.fakes import FakeClock, FakeResponse, FakeSession
 
 REDDIT_FEED = """<?xml version="1.0" encoding="UTF-8"?>
@@ -143,6 +143,64 @@ def test_hackernews_defaults_to_ask_hn():
     assert HackerNewsSource("automate", tags="story").name == "Hacker News: automate"
 
 
+# --------------------------------------------------------- stack exchange
+
+
+def se_item(**overrides):
+    item = {
+        "question_id": 182677,
+        "link": "https://webapps.stackexchange.com/questions/182677/auto-email",
+        "title": "Can I auto-email when a sheet row is added? It&#39;s urgent",
+        "body": "<p>I copy rows daily. Mail me: me@x.com</p>",
+        "owner": {"display_name": "sheet&amp;fan"},
+        "creation_date": 1763460000,
+    }
+    item.update(overrides)
+    return item
+
+
+def test_stackexchange_parses_questions():
+    http, session = http_with(FakeResponse(200, {"items": [se_item()], "quota_remaining": 290}))
+    now = datetime(2026, 11, 19, tzinfo=timezone.utc)
+    posts = StackExchangeSource("webapps", "automate", lookback_hours=24, now=lambda: now).fetch(http)
+    assert len(posts) == 1
+    post = posts[0]
+    assert post.id == "se_webapps_182677" and post.platform == "stackexchange"
+    assert post.title == "Can I auto-email when a sheet row is added? It's urgent"
+    assert post.author_handle == "sheet&fan"
+    assert "me@x.com" not in post.body
+    params = session.calls[0][1]
+    assert params["site"] == "webapps" and params["filter"] == "withbody"
+    assert params["fromdate"] == int(now.timestamp()) - 24 * 3600
+
+
+def test_stackexchange_skips_closed_and_foreign_links():
+    items = [se_item(closed_date=1), se_item(question_id=2, link="https://evil.example.com/q/2"),
+             se_item(question_id="x")]
+    http, _ = http_with(FakeResponse(200, {"items": items}))
+    assert StackExchangeSource("webapps", "automate").fetch(http) == []
+
+
+def test_stackexchange_obeys_backoff():
+    clock = FakeClock()
+    session = FakeSession(FakeResponse(200, {"items": [], "backoff": 10}))
+    http = PoliteHttpClient("ua", session=session, sleep=clock.sleep, clock=clock.time)
+    StackExchangeSource("webapps", "automate").fetch(http)
+    assert 10 in clock.sleeps
+
+
+def test_stackexchange_bad_response():
+    http, _ = http_with(FakeResponse(200, {"error_id": 502}))
+    with pytest.raises(SourceFetchError):
+        StackExchangeSource("webapps", "automate").fetch(http)
+
+
+@pytest.mark.parametrize(("site", "query"), [("Web Apps!", "automate"), ("webapps", "")])
+def test_stackexchange_validation(site, query):
+    with pytest.raises(ValueError):
+        StackExchangeSource(site, query)
+
+
 # ---------------------------------------------------------------- forums
 
 FORUM_FEED = """<?xml version="1.0" encoding="UTF-8" ?>
@@ -224,6 +282,7 @@ def test_load_sources_from_real_config():
     assert "r/smallbusiness" in names
     assert "Ask HN: automate" in names
     assert "n8n community" in names and "Make community" in names
+    assert "Stack Exchange webapps: automate" in names
 
 
 @pytest.mark.parametrize(
