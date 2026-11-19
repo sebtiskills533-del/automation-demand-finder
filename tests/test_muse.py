@@ -224,14 +224,25 @@ def test_extract_reply():
 
 
 class FakeLocator:
-    """Like Playwright, refuses to check an element shown twice unless `.first` is used."""
+    """Like Playwright: names may be regexes, and an element shown twice can only
+    be checked through `.first`."""
 
-    def __init__(self, page, key, first=False):
-        self.page, self.key, self._first = page, key, first
+    def __init__(self, page, role, name, first=False):
+        self.page, self.role, self.name, self._first = page, role, name, first
 
     @property
     def first(self):
-        return FakeLocator(self.page, self.key, first=True)
+        return FakeLocator(self.page, self.role, self.name, first=True)
+
+    @property
+    def key(self):
+        """The visible element this locator resolves to (or its own name if none)."""
+        for role, label in self.page.visible:
+            if role != self.role:
+                continue
+            if (self.name.search(label) if isinstance(self.name, re.Pattern) else label == self.name):
+                return (role, label)
+        return (self.role, self.name)
 
     def is_visible(self):
         if self.key in self.page.duplicates and not self._first:
@@ -244,6 +255,8 @@ class FakeLocator:
 
     def click(self):
         self.page.clicks.append(self.key)
+        if self.key == CHATS:  # opening the collapsed chat list shows the chats
+            self.page.visible |= self.page.behind_chats_button
 
     def fill(self, text):
         self.page.typed = text
@@ -259,22 +272,29 @@ class FakeLocator:
 class FakePage:
     url = "https://muse.ai/chat/abc"
 
-    def __init__(self, visible, reply="POSTS START", log_text="earlier messages\n", duplicates=()):
+    def __init__(self, visible, reply="POSTS START", log_text="earlier messages\n", duplicates=(),
+                 behind_chats_button=()):
         self.visible, self.reply, self.log_text = set(visible), reply, log_text
         self.duplicates = set(duplicates)
-        self.clicks, self.typed, self.closed = [], "", False
-        self.keyboard = self
+        self.behind_chats_button = set(behind_chats_button)
+        self.clicks, self.typed, self.closed, self.pressed = [], "", False, []
+
+    @property
+    def keyboard(self):
+        return self
+
+    def press(self, key):
+        self.pressed.append(key)
 
     def goto(self, url, wait_until=None):
         assert url == "https://muse.ai/"
 
     def get_by_role(self, role, name, exact=False):
-        label = name.pattern if isinstance(name, re.Pattern) else name
-        return FakeLocator(self, (role, label))
+        return FakeLocator(self, role, name)
 
     def locator(self, selector):
         assert selector == selectors.MESSAGE_LOG
-        return FakeLocator(self, "log")
+        return FakeLocator(self, "log", "log")
 
     def wait_for_timeout(self, ms):
         pass
@@ -285,6 +305,7 @@ class FakePage:
 
 COMPOSER = ("textbox", "Message")
 LOGIN = ("button", "Log in")
+CHATS = ("button", "Chats")
 CHAT = ("button", "AUTOMATION DEMAND FINDER")
 
 
@@ -300,12 +321,34 @@ def no_wait(read):
     return read()
 
 
-def test_ask_muse_sends_job_and_returns_reply():
+def test_ask_muse_with_chat_list_already_open():
+    # The real wide-window layout (2026-11-19): side chats are listed, no "Chats" button.
     page = FakePage({COMPOSER, CHAT}, reply="POSTS START\n...")
     result = ask_muse(FakeContext(page), "AUTOMATION DEMAND FINDER", "FIND POSTS.", wait=no_wait)
     assert result == MuseReplyText("POSTS START\n...", "https://muse.ai/chat/abc")
-    assert ("button", "^Chats") in page.clicks and CHAT in page.clicks
+    assert page.clicks[0] == CHAT and CHATS not in page.clicks
+    assert "Escape" not in page.pressed  # nothing to close
     assert page.typed == "FIND POSTS." and page.closed
+
+
+def test_ask_muse_opens_collapsed_chat_list():
+    page = FakePage({COMPOSER, CHATS}, behind_chats_button={CHAT})
+    ask_muse(FakeContext(page), "AUTOMATION DEMAND FINDER", "FIND POSTS.", wait=no_wait)
+    assert page.clicks[:2] == [CHATS, CHAT]
+    assert "Escape" in page.pressed  # closes the panel it opened
+
+
+def test_chat_with_unread_updates_is_found():
+    unread = ("button", "AUTOMATION DEMAND FINDER Unread updates")
+    page = FakePage({COMPOSER, unread})
+    ask_muse(FakeContext(page), "AUTOMATION DEMAND FINDER", "FIND POSTS.", wait=no_wait)
+    assert page.clicks[0] == unread
+
+
+def test_similar_chat_names_are_not_confused():
+    page = FakePage({COMPOSER, ("button", "AUTOMATION DEMAND FINDER OLD")})
+    with pytest.raises(MuseChatNotFoundError):
+        ask_muse(FakeContext(page), "AUTOMATION DEMAND FINDER", "x", wait=no_wait)
 
 
 def test_ask_muse_logged_out():

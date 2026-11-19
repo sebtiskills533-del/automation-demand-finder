@@ -82,8 +82,14 @@ def open_chat(page, chat_name: str) -> None:
             "and look at the Muse Chrome window."
         )
 
-    page.get_by_role("button", name=selectors.CHATS_BUTTON).first.click()
-    chat = page.get_by_role("button", name=chat_name or selectors.MAIN_CHAT, exact=True).first
+    chat = page.get_by_role("button", name=selectors.chat_button_name(chat_name or selectors.MAIN_CHAT)).first
+    # In a wide window the chat list is already open; otherwise open it via "Chats".
+    opened_panel = False
+    if not _visible(chat):
+        chats = page.get_by_role("button", name=selectors.CHATS_BUTTON).first
+        if _visible(chats):
+            chats.click()
+            opened_panel = True
     try:
         chat.wait_for(state="visible", timeout=15_000)
     except Exception as exc:  # Playwright TimeoutError
@@ -92,10 +98,11 @@ def open_chat(page, chat_name: str) -> None:
             "or fix MUSE_CHAT in .env."
         ) from exc
     chat.click()
-    try:
-        page.keyboard.press("Escape")  # close the chats panel
-    except Exception:  # noqa: BLE001 - harmless if the panel is already closed
-        pass
+    if opened_panel:
+        try:
+            page.keyboard.press("Escape")  # close the chats panel we opened
+        except Exception:  # noqa: BLE001 - harmless if it closed by itself
+            pass
 
 
 def ask_muse(
