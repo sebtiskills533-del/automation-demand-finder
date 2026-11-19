@@ -414,6 +414,24 @@ def test_settings_page_lists_all_models_and_saves_choice(env):
         assert store.get_setting(conn, "model.analyze") == "claude-sonnet-5-5"
 
 
+def test_writing_style_switch_on_settings_page_is_saved(env):
+    at = AppTest.from_function(_settings_page_app, default_timeout=TIMEOUT).run()
+    at.segmented_control(key="style_settings_convincing").set_value("tip_first").run()
+    assert not at.exception
+    with db.open_db(env) as conn:
+        assert store.get_setting(conn, "writing.style") == "tip_first"
+    # Every picker now shows the saved choice.
+    at = AppTest.from_function(_settings_page_app, default_timeout=TIMEOUT).run()
+    assert at.segmented_control(key="style_settings_tip_first").value == "tip_first"
+
+
+def test_reply_tab_shows_the_style_switch(env):
+    seed(env)
+    at = login()
+    assert not at.exception
+    assert at.segmented_control(key="style_reply_reddit_0_convincing").value == "convincing"
+
+
 # ---------------------------------------------------------------- replies
 
 FB_REPLY_URL = "https://www.facebook.com/groups/1/posts/2/?comment_id=3"

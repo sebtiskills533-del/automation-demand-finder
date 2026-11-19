@@ -39,6 +39,7 @@ from app.ui.components import (
     md_escape,
     page_header,
     verdict_badge,
+    writing_style_picker,
 )
 from app.ui.reply_widgets import reply_card
 from app.ui.table import build_table, stars
@@ -224,12 +225,13 @@ def _overview(post: dict) -> None:
 
 def _reply_tab(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry, post: dict) -> None:
     model = registry.model_for_task(conn, "reply")
-    st.caption(f"Claude writes a short, helpful reply (a free tip first). You edit it and post it "
-               f"yourself — nothing is ever posted for you. Uses {model.name}.")
+    st.caption(f"Claude writes a short, helpful reply. You edit it and post it yourself — nothing is "
+               f"ever posted for you. Uses {model.name}.")
+    style = writing_style_picker(conn, f"reply_{post['id']}")
     has_draft = bool(post["reply_draft"])
     if st.button("✨ Write a new draft" if has_draft else "✨ Draft a reply with Claude",
                  type="secondary" if has_draft else "primary", key=f"draft_{post['id']}"):
-        if _run_ai(lambda: draft_reply(conn, build_llm(settings, conn), registry, settings, post["id"]),
+        if _run_ai(lambda: draft_reply(conn, build_llm(settings, conn), registry, settings, post["id"], style),
                    "Claude is writing a reply..."):
             st.rerun()
     if not has_draft:

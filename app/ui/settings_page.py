@@ -13,7 +13,7 @@ from app.config import Settings
 from app.domain import utc_now
 from app.errors import ConfigError
 from app.models_registry import TASKS, ModelRegistry
-from app.ui.components import page_header
+from app.ui.components import page_header, writing_style_picker
 
 TASK_HELP = {
     "analyze": "Rates every new post. Runs the most, so the cheapest model is best.",
@@ -29,6 +29,11 @@ def render(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry
     _spending(conn, settings)
     st.write("")
     _model_choice(conn, registry)
+    st.write("")
+    with st.container(border=True):
+        st.markdown("#### ✍️ How replies and emails are written")
+        st.caption("Switch any time; it is remembered and also shown next to every draft button.")
+        writing_style_picker(conn, "settings")
     st.write("")
     _model_table(registry)
 

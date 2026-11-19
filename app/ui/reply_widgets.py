@@ -15,7 +15,7 @@ from app.domain import MAX_REPLY_CHARS, PLATFORM_NAMES
 from app.emails import draft_email, mailto_link
 from app.errors import AppError
 from app.models_registry import ModelRegistry
-from app.ui.components import md_escape
+from app.ui.components import md_escape, writing_style_picker
 
 log = logging.getLogger(__name__)
 
@@ -42,13 +42,14 @@ def _email_section(conn: sqlite3.Connection, settings: Settings, registry: Model
     st.caption("✉️ Email they shared with you")
     st.code(reply["email"], language=None)
     model = registry.model_for_task(conn, "email")
+    style = writing_style_picker(conn, f"email_{reply['id']}")
     has_draft = bool(reply["email_body"])
     if st.button("✨ Write a new email draft" if has_draft else "✨ Draft an email with Claude",
                  type="secondary" if has_draft else "primary", key=f"email_draft_{reply['id']}",
                  help=f"Uses {model.name}. You review it and send it yourself."):
         try:
             with st.spinner("Claude is writing the email..."):
-                draft_email(conn, build_llm(settings, conn), registry, settings, reply["id"])
+                draft_email(conn, build_llm(settings, conn), registry, settings, reply["id"], style)
             st.rerun()
         except (AppError, ValueError) as exc:
             log.warning("Email draft failed: %s", exc)

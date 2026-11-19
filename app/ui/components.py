@@ -74,6 +74,23 @@ def empty_state(message: str, hint: str = "") -> None:
             st.caption(hint)
 
 
+def writing_style_picker(conn, place: str) -> str:
+    """Switch between the writing styles; the choice is saved and shared by every picker."""
+    from app.writing import STYLE_HELP, STYLE_LABELS, get_style, set_style
+
+    current = get_style(conn)
+    # The current style is part of the key, so every picker re-shows the saved choice.
+    choice = st.segmented_control(
+        "Writing style", list(STYLE_LABELS), default=current, format_func=STYLE_LABELS.get,
+        key=f"style_{place}_{current}", help=" · ".join(f"{STYLE_LABELS[s]}: {h}" for s, h in STYLE_HELP.items()),
+    )
+    if choice and choice != current:
+        set_style(conn, choice)
+        st.toast(f"Writing style: {STYLE_LABELS[choice]}")
+        return choice
+    return current
+
+
 def labelled_text(label: str, text: str) -> None:
     """A small label with plain (never formatted) text under it."""
     st.caption(label)
