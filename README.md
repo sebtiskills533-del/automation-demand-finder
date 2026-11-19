@@ -182,5 +182,5 @@ git pull
 | `Claude rejected the API key` | Check the key and that your Anthropic account has credit |
 | `r/...: FAILED (HTTP 429)` | Reddit is rate-limiting you; it retries next run. Setting `REDDIT_USERNAME` helps |
 | `Monthly AI budget ... reached` | Raise `MONTHLY_BUDGET_USD` or wait for next month |
-| Dashboard says no password is set | Run `.venv\Scripts\python -m app.set_password`, then restart the dashboard |
+| Dashboard says no password is set | Run `.venv\Scripts\python -m app.set_password`, then reload the page |
 | `Too many wrong passwords` | Wait 15 minutes |

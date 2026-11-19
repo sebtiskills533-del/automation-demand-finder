@@ -92,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         print(f"Password not accepted: {exc}")
         return 1
-    print(f"Saved. The hash is in {ENV_FILE.relative_to(PROJECT_ROOT)}; restart the dashboard to use it.")
+    print(f"Saved. The hash is in {ENV_FILE.relative_to(PROJECT_ROOT)}; the dashboard uses it from the next login.")
     if visible:
         print("Tip: type  cls  and press Enter to clear the password from the screen.")
     return 0

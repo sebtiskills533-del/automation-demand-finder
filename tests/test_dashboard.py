@@ -62,6 +62,27 @@ def test_login_form_shown_first_and_no_data_leaks(env):
     assert len(at.dataframe) == 0
 
 
+def test_new_password_works_without_restarting_dashboard(env, tmp_path, monkeypatch):
+    """Regression: changing the password in .env must take effect in a running dashboard."""
+    import os
+
+    from app import config
+
+    env_file = tmp_path / ".env"
+    monkeypatch.setattr(config, "ENV_FILE", env_file)
+    monkeypatch.delenv("DASHBOARD_PASSWORD_HASH")  # read it from the .env file instead
+
+    env_file.write_text(f"DASHBOARD_PASSWORD_HASH={hash_password('old password 123', n=2**10)}\n")
+    assert any(t.value == "Opportunities" for t in login("old password 123").title)
+
+    env_file.write_text(f"DASHBOARD_PASSWORD_HASH={hash_password('new password 456', n=2**10)}\n")
+    later = env_file.stat().st_mtime + 5
+    os.utime(env_file, (later, later))  # make sure the change is visible on any file system
+
+    assert "Wrong password" in all_text(login("old password 123"))
+    assert any(t.value == "Opportunities" for t in login("new password 456").title)
+
+
 def test_wrong_password(env):
     at = login("not the password")
     assert "Wrong password" in all_text(at)

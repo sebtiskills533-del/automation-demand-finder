@@ -18,7 +18,7 @@ def require_login(conn: sqlite3.Connection, settings: Settings) -> bool:
     if not settings.dashboard_password_hash:
         st.error(
             "No dashboard password is set yet. In the project folder run:\n\n"
-            "`.venv\\Scripts\\python -m app.set_password`\n\nthen restart the dashboard."
+            "`.venv\\Scripts\\python -m app.set_password`\n\nthen reload this page."
         )
         return False
 

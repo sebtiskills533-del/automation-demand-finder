@@ -16,7 +16,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 import streamlit as st  # noqa: E402
 
-from app import db  # noqa: E402
+from app import config, db  # noqa: E402
 from app.config import Settings, load_settings  # noqa: E402
 from app.errors import AppError  # noqa: E402
 from app.logging_setup import setup_logging  # noqa: E402
@@ -25,10 +25,22 @@ from app.ui import import_page, opportunities, settings_page  # noqa: E402
 from app.ui.login import require_login  # noqa: E402
 
 
-@st.cache_resource(show_spinner=False)
-def _load_config() -> tuple[Settings, ModelRegistry]:
-    """Read settings once per dashboard start (restart after editing .env)."""
-    settings = load_settings()
+def _config_version() -> tuple[float, float]:
+    """Last-changed times of .env and models.json. When either file changes
+    (for example a new password), the cached settings below are reloaded."""
+    def mtime(path) -> float:
+        try:
+            return path.stat().st_mtime
+        except FileNotFoundError:
+            return 0.0
+
+    return mtime(config.ENV_FILE), mtime(config.CONFIG_DIR / "models.json")
+
+
+@st.cache_resource(show_spinner=False, max_entries=1)
+def _load_config(version: tuple[float, float]) -> tuple[Settings, ModelRegistry]:
+    """Read settings; `version` changes whenever .env or models.json is edited."""
+    settings = load_settings(env_file=config.ENV_FILE)
     setup_logging(settings.log_dir, settings.log_level)
     return settings, load_registry(settings.models_file)
 
@@ -36,7 +48,7 @@ def _load_config() -> tuple[Settings, ModelRegistry]:
 def main() -> None:
     st.set_page_config(page_title="Automation Demand Finder", page_icon="🔎", layout="wide")
     try:
-        settings, registry = _load_config()
+        settings, registry = _load_config(_config_version())
     except AppError as exc:
         st.error(f"Configuration problem: {exc}")
         st.stop()
