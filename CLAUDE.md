@@ -59,6 +59,7 @@ app/
   clusters.py         v1.1 top problems (numbered lines in, numbers out)
   specs.py            v1.2 product specs per problem group
   inbox.py            replies people sent the user (linking, email-if-shared rule)
+  explain.py          'Samjhao' tab: Roman Urdu job explanation, only on click (explanations table)
   emails.py           email drafts for replies with a shared email (mailto, never sends)
   auth.py             password hashing + login lockout
   set_password.py     CLI to set the dashboard password

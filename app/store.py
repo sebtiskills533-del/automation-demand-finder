@@ -354,6 +354,32 @@ def get_decision_report(conn: sqlite3.Connection, post_id: str) -> dict | None:
     return report
 
 
+# ----------------------------------------------------------- explanations
+
+MAX_EXPLANATION_CHARS = 20_000
+
+
+def save_explanation(conn: sqlite3.Connection, post_id: str, content: dict, model: str) -> None:
+    """Keep (or replace) the Roman Urdu explanation of one post."""
+    data = json.dumps(content, ensure_ascii=False)
+    if len(data) > MAX_EXPLANATION_CHARS:
+        raise ValueError("The explanation is too long")
+    with transaction(conn):
+        conn.execute(
+            "INSERT OR REPLACE INTO explanations (post_id, content, model, created_at) VALUES (?, ?, ?, ?)",
+            (post_id, data, model, to_iso(utc_now())),
+        )
+
+
+def get_explanation(conn: sqlite3.Connection, post_id: str) -> dict | None:
+    """{"content": {...}, "model", "created_at"} or None if never explained."""
+    row = conn.execute("SELECT content, model, created_at FROM explanations WHERE post_id = ?",
+                       (post_id,)).fetchone()
+    if row is None:
+        return None
+    return {"content": json.loads(row["content"]), "model": row["model"], "created_at": row["created_at"]}
+
+
 # --------------------------------------------------------------- clusters
 
 

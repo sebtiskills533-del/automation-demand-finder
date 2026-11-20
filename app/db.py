@@ -189,8 +189,19 @@ ALTER TABLE analyses ADD COLUMN service TEXT NOT NULL DEFAULT 'automation';
 CREATE INDEX idx_analyses_service ON analyses (service);
 """
 
+# explanations: a simple Roman Urdu "what is this job and how to do it", made only when
+# the user clicks the button for that post. content is JSON (see app/explain.py).
+_SCHEMA_V8 = """
+CREATE TABLE explanations (
+    post_id     TEXT PRIMARY KEY REFERENCES posts (id) ON DELETE CASCADE,
+    content     TEXT NOT NULL,
+    model       TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+);
+"""
+
 MIGRATIONS: tuple[str, ...] = (
-    _SCHEMA_V1, _SCHEMA_V2, _SCHEMA_V3, _SCHEMA_V4, _SCHEMA_V5, _SCHEMA_V6, _SCHEMA_V7,
+    _SCHEMA_V1, _SCHEMA_V2, _SCHEMA_V3, _SCHEMA_V4, _SCHEMA_V5, _SCHEMA_V6, _SCHEMA_V7, _SCHEMA_V8,
 )
 
 

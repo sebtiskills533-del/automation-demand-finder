@@ -39,7 +39,7 @@ def seed(conn, post_id="reddit_1", status=None, **analysis):
 
 
 def test_every_task_has_a_default_model(registry, conn):
-    assert set(TASKS) == {"analyze", "reply", "report", "cluster", "spec", "email"}
+    assert set(TASKS) == {"analyze", "reply", "report", "cluster", "spec", "email", "explain"}
     assert registry.model_for_task(conn, "reply").id == "claude-sonnet-5-5"
     assert registry.model_for_task(conn, "cluster").id == "claude-haiku-5-5"
 

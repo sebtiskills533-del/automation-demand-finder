@@ -22,6 +22,7 @@ TASKS = {
     "cluster": "Grouping into top problems",
     "spec": "Product specs",
     "email": "Email drafts",
+    "explain": "Job explanations (Roman Urdu)",
 }
 
 _SETTING_PREFIX = "model."

@@ -29,6 +29,7 @@ from app.domain import (
     utc_now,
 )
 from app.errors import AppError
+from app.explain import explain_job
 from app.models_registry import ModelRegistry
 from app.replies import draft_reply
 from app.reports import make_report
@@ -189,11 +190,14 @@ def _details(conn: sqlite3.Connection, settings: Settings, registry: ModelRegist
 
         new_replies = store.unseen_reply_count(conn, post_id)
         replies_label = f"💬 Replies ({new_replies} new)" if new_replies else "💬 Replies"
-        overview, reply, report, track, answers = st.tabs(
-            ["📄 Overview", "✍️ Reply", "📋 Decision report", "🗂️ Track", replies_label], key=f"tabs_{post_id}"
+        overview, explain, reply, report, track, answers = st.tabs(
+            ["📄 Overview", "💡 Samjhao", "✍️ Reply", "📋 Decision report", "🗂️ Track", replies_label],
+            key=f"tabs_{post_id}",
         )
         with overview:
             _overview(post)
+        with explain:
+            _explain_tab(conn, settings, registry, post)
         with reply:
             _reply_tab(conn, settings, registry, post)
         with report:
@@ -230,6 +234,48 @@ def _overview(post: dict) -> None:
         labelled_text("Product potential", f"{stars(post['product_potential'])}  ({post['product_potential']}/5)")
     with st.expander("Read the full post"):
         st.text(f"{post['title']}\n\n{post['body'] or '(no text)'}")
+
+
+def _explain_tab(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry, post: dict) -> None:
+    """Roman Urdu explanation, made only when the user clicks the button."""
+    saved = store.get_explanation(conn, post["id"])
+    model = registry.model_for_task(conn, "explain")
+    label = "🔄 Dobara samjhao" if saved else "💡 Yeh job samjhao"
+    if st.button(label, type="secondary" if saved else "primary", key=f"explain_{post['id']}"):
+        if _run_ai(lambda: explain_job(conn, build_llm(settings, conn), registry, settings, post["id"]),
+                   "Claude job samjha raha hai..."):
+            st.rerun()
+    st.caption(f"Yeh job kya hai aur kaise karni hai, aasaan Roman Urdu mein. Sirf button dabane par "
+               f"banti hai aur save rehti hai. Uses {model.name}.")
+    if saved:
+        _explanation_card(saved["content"])
+
+
+def _bullets(lines: list[str]) -> str:
+    return "\n".join(f"- {md_escape(line)}" for line in lines)
+
+
+def _explanation_card(content: dict) -> None:
+    # Claude's text is based on a stranger's post, so every piece is escaped.
+    st.markdown("#### 🤔 Yeh kaam kya hai?")
+    st.markdown(md_escape(content["kaam_kya_hai"]))
+    st.info(f"🏪 Misaal: {md_escape(content['misaal'])}")
+    st.markdown("#### 🎁 Client ko aakhir mein kya chahiye")
+    st.markdown(_bullets(content["client_ko_kya_chahiye"]))
+    st.markdown("#### 🪜 Kaise karna hai (step by step)")
+    for n, step in enumerate(content["steps"], start=1):
+        st.markdown(f"**{n}. {md_escape(step['title'])}**  \n{md_escape(step['detail'])}")
+    left, right = st.columns(2)
+    with left:
+        st.markdown("#### 🧰 Kya chahiye")
+        st.markdown(_bullets(content["tools"]))
+    with right:
+        st.markdown("#### ⚠️ Dhyan rakhein")
+        st.markdown(_bullets(content["mushkil_baatein"]))
+    if content.get("naye_alfaz"):
+        with st.expander("📖 Naye alfaz (mushkil words ka matlab)"):
+            st.markdown(_bullets([f"{t['word']}: {t['meaning']}" for t in content["naye_alfaz"]]))
+    st.success(f"👉 Pehla qadam: {md_escape(content['pehla_qadam'])}")
 
 
 def _reply_tab(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry, post: dict) -> None:

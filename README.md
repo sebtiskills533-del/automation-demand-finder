@@ -104,7 +104,7 @@ Logs from every run are in `logs/app.log`.
 
 | Page | What you do there |
 | --- | --- |
-| 🎯 **Opportunities** | Pick a view (⭐ Best leads, 🛠️ In progress, 📋 All…), click a post, then use the tabs: **Overview**, **✍️ Reply** (draft with Claude, edit, copy), **📋 Decision report** (after you tick it), **🗂️ Track** (status, path, notes) |
+| 🎯 **Opportunities** | Pick a view (⭐ Best leads, 🛠️ In progress, 📋 All…), click a post, then use the tabs: **Overview**, **💡 Samjhao** (click the button: Claude explains the job and how to do it in simple Roman Urdu, about Rs 2–3 each, saved after that), **✍️ Reply** (draft with Claude, edit, copy), **📋 Decision report** (after you tick it), **🗂️ Track** (status, path, notes) |
 | 🧩 **Top problems** | See requests that repeat, open one to see its posts, and click **📝 Write product spec** (download it for Claude Code) |
 | 💼 **Jobs** (a view on Opportunities) | Job-board listings rated for a beginner: small gigs, part-time and junior roles rank high, senior full-time roles low |
 | 🧭 **Platforms** | All the freelancing platforms you listed, grouped: connected automatically, good fit (use by hand, e.g. Fiverr, Upwork), later, not your skills. Edit config/platforms.json |

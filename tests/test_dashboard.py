@@ -245,6 +245,36 @@ def test_report_tab_asks_to_tick_first_then_shows_report(env, monkeypatch):
     assert any("Tip: use an onFormSubmit trigger" in c.value for c in at.code)
 
 
+def test_samjhao_tab_explains_only_when_clicked(env, monkeypatch):
+    from app.llm import ClaudeClient
+    from app.ui import opportunities
+    from tests.fakes import FakeAnthropic, fake_message
+    from tests.test_explain import EXPLANATION
+
+    seed(env)
+    tricky = EXPLANATION | {"pehla_qadam": "Click [here](https://evil.example) now"}
+    fake = FakeAnthropic(fake_message(tricky))
+
+    def fake_llm(settings, conn):
+        sink = lambda t, m, i, o, c: store.log_usage(conn, t, m, i, o, c)  # noqa: E731
+        return ClaudeClient("key", sink, client=fake)
+
+    monkeypatch.setattr(opportunities, "build_llm", fake_llm)
+    at = login()
+    assert any(t.label == "💡 Samjhao" for t in at.tabs)
+    assert fake.calls == []                                 # nothing until the click
+    with db.open_db(env) as conn:
+        assert store.get_explanation(conn, "reddit_0") is None
+
+    at = _click(at, "💡 Yeh job samjhao")
+    assert not at.exception and len(fake.calls) == 1
+    text = all_text(at) + "\n".join(str(s.value) for s in (*at.success, *at.info))
+    assert "Client chahta hai" in text and "Access lein" in text
+    pehla = next(s.value for s in at.success if "Pehla qadam" in s.value)
+    assert "\\[here\\]" in pehla                             # Markdown escaped: no live link
+    assert _by_label(at.button, "🔄 Dobara samjhao")
+
+
 def test_ai_errors_are_shown_not_crashed(env):
     seed(env)
     at = login()  # no ANTHROPIC_API_KEY in the test environment
