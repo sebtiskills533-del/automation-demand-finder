@@ -37,7 +37,10 @@ app/
   privacy.py          strips emails / phone numbers
   html_text.py        HTML -> plain text
   http_client.py      polite HTTP client (rate limit, retries, UA)
-  sources/            Reddit RSS, Hacker News (Ask HN), Stack Exchange and Discourse fetchers
+  sources/            Reddit RSS, Hacker News (Ask HN), Stack Exchange, Discourse, rss_forum and
+                      jobs.py (Freelancer.com, Remote OK, Remotive, Himalayas, WWR, Working Nomads;
+                      budgets via money_range so the phone filter never eats them)
+  services.py         the user's services (config/services.json): automation, etsy, seo, local_seo
   importer.py         import user-supplied posts (CSV/JSON/form); skips the keyword filter
   muse/               optional Muse collection: browser.py (Chrome/CDP/lock), client.py
                       (chat driving), parse.py (reply format), job.py (run), selectors.py
@@ -61,9 +64,9 @@ app/
   set_password.py     CLI to set the dashboard password
   dashboard.py        Streamlit entry point
   ui/                 dashboard pages (opportunities, replies_page, problems_page,
-                      import_page, settings_page), reply_widgets.py, background.py, components.py (badges, md_escape), assets/
+                      import_page, platforms_page, settings_page), reply_widgets.py, background.py, components.py (badges, md_escape), assets/
                       Theme: .streamlit/config.toml (teal + amber).
-config/               sources.json, phrases.txt, models.json (user-editable)
+config/               sources.json, phrases.txt, models.json, services.json, platforms.json (user-editable)
 run_daily.py          the daily run
 tests/                pytest suite (no network, no real API calls)
 ```

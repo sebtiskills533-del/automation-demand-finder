@@ -8,8 +8,12 @@ each request, and shows a ranked list you can tick, track and act on.
 
 1. **Collect** new public posts from Ask HN, the n8n and Make community forums
    (official Discourse feeds), Stack Exchange (official API) and subreddit feeds
-   (Reddit needs API approval). You can also **import** posts you found anywhere
-   else (Facebook, Instagram, Quora...): see section 5.
+   (Reddit needs API approval), plus **jobs** from freelance marketplaces and remote
+   job boards with official feeds: Freelancer.com, Remote OK, Remotive, Himalayas,
+   We Work Remotely and Working Nomads (searches: config/sources.json → job_boards).
+   Services looked for: automation, Etsy, SEO and local SEO (config/services.json).
+   You can also **import** posts you found anywhere else (Facebook, Instagram,
+   Quora...): see section 5.
 2. **Filter** out posts that clearly aren't requests (a free keyword check).
 3. **Analyse** the rest with Claude. Each post gets:
    - a one-line summary, difficulty, best tool and estimated build hours
@@ -102,6 +106,8 @@ Logs from every run are in `logs/app.log`.
 | --- | --- |
 | 🎯 **Opportunities** | Pick a view (⭐ Best leads, 🛠️ In progress, 📋 All…), click a post, then use the tabs: **Overview**, **✍️ Reply** (draft with Claude, edit, copy), **📋 Decision report** (after you tick it), **🗂️ Track** (status, path, notes) |
 | 🧩 **Top problems** | See requests that repeat, open one to see its posts, and click **📝 Write product spec** (download it for Claude Code) |
+| 💼 **Jobs** (a view on Opportunities) | Job-board listings rated for a beginner: small gigs, part-time and junior roles rank high, senior full-time roles low |
+| 🧭 **Platforms** | All the freelancing platforms you listed, grouped: connected automatically, good fit (use by hand, e.g. Fiverr, Upwork), later, not your skills. Edit config/platforms.json |
 | 📥 **Import posts** | Add posts you found yourself, rate them, or start a Muse collection |
 | ⚙️ **Settings & costs** | This month's AI spending and which Claude model does each job |
 
@@ -201,7 +207,7 @@ app/
   db.py / store.py    SQLite schema + every query (safe placeholders only)
   privacy.py          removes emails and phone numbers
   http_client.py      polite HTTP: 2 s between requests, retries, clear User-Agent
-  sources/            Reddit RSS, Hacker News, Stack Exchange and Discourse forum readers
+  sources/            Reddit RSS, Hacker News, Stack Exchange, Discourse forum and job-board readers (jobs.py)
   importer.py         import posts from CSV / JSON / the dashboard form
   muse/               optional Muse collection (Chrome over CDP, chat driving, reply parsing)
   collect.py          step 1    prefilter.py  step 2    analyze.py  step 3
