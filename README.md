@@ -126,6 +126,14 @@ When people answer your comments on Facebook, Instagram or Quora:
    The app never looks for emails anywhere else, and phone numbers are always removed.
 4. For a reply with an email: **✨ Draft an email with Claude**, edit it, then
    **📧 Open in my email app** — you press Send yourself; the app never sends email.
+5. **Tick what you've read:** every reply has a **✅ Seen** tick (in the table and on the
+   reply). Opening a reply doesn't tick it; **🆕 Not seen yet** shows the unticked ones,
+   and **✅ Mark all as seen** ticks them in one go.
+6. **📝 Posts I answered** lists every post you answered with its number of replies.
+
+**Answered posts:** after you answer a post, tick **✅ Maine jawab bhej diya** on it
+(Opportunities). It then shows ✅ in the table and in the **✅ Answered** view. Posts
+that get a reply are ticked automatically.
 
 ## 4. Settings you can change
 

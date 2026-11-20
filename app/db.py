@@ -200,8 +200,18 @@ CREATE TABLE explanations (
 );
 """
 
+# actions.answered_at: when the user answered that post (ticked by hand, or set when a
+# reply to it comes in). NULL = not answered yet.
+_SCHEMA_V9 = """
+ALTER TABLE actions ADD COLUMN answered_at TEXT;
+INSERT INTO actions (post_id, answered_at, updated_at)
+    SELECT post_id, MIN(received_at), MIN(received_at) FROM replies WHERE post_id IS NOT NULL GROUP BY post_id
+    ON CONFLICT (post_id) DO UPDATE SET answered_at = COALESCE(actions.answered_at, excluded.answered_at);
+"""
+
 MIGRATIONS: tuple[str, ...] = (
     _SCHEMA_V1, _SCHEMA_V2, _SCHEMA_V3, _SCHEMA_V4, _SCHEMA_V5, _SCHEMA_V6, _SCHEMA_V7, _SCHEMA_V8,
+    _SCHEMA_V9,
 )
 
 

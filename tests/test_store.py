@@ -194,3 +194,45 @@ def test_old_login_attempts_are_pruned(conn):
     store.record_login_attempt(conn, False, now - timedelta(days=40))
     store.record_login_attempt(conn, False, now)
     assert conn.execute("SELECT COUNT(*) FROM login_attempts").fetchone()[0] == 1
+
+
+def test_answered_tick_and_filter(conn):
+    for pid in ("reddit_1", "reddit_2"):
+        store.save_post(conn, make_post(pid))
+        store.save_analysis(conn, make_analysis(pid))
+    store.set_answered(conn, "reddit_1", True)
+    answered = store.get_dashboard_rows(conn, DashboardFilters(answered=True))
+    assert [r["id"] for r in answered] == ["reddit_1"] and answered[0]["answered_at"].endswith("Z")
+    assert [r["id"] for r in store.get_dashboard_rows(conn, DashboardFilters(answered=False))] == ["reddit_2"]
+    assert store.count_dashboard_rows(conn, DashboardFilters()) == 2
+    store.set_answered(conn, "reddit_1", False)
+    assert store.count_dashboard_rows(conn, DashboardFilters(answered=True)) == 0
+    # status and notes are untouched by the tick
+    assert store.get_post_details(conn, "reddit_1")["status"] == "New"
+
+
+def test_answered_at_must_be_a_real_time(conn):
+    store.save_post(conn, make_post("reddit_1"))
+    with pytest.raises(ValueError):
+        store.update_action(conn, "reddit_1", answered_at="yesterday; DROP TABLE posts")
+    with pytest.raises(ValueError):
+        store.set_answered(conn, "nope", True)
+
+
+def test_upgrade_ticks_posts_that_already_have_replies(tmp_path):
+    path = tmp_path / "old.db"
+    conn = db.connect(path)
+    for version, script in enumerate(db.MIGRATIONS[:8], start=1):  # a database from before V9
+        for statement in db._split_statements(script):
+            conn.execute(statement)
+        conn.execute(f"PRAGMA user_version = {version:d}")
+    conn.commit()
+    store.save_post(conn, make_post("facebook_1", platform="facebook"))
+    store.save_post(conn, make_post("facebook_2", platform="facebook"))
+    store.save_reply(conn, {"reply_key": "k", "post_id": "facebook_1", "platform": "facebook",
+                            "url": "https://facebook.com/x", "author": "A", "text": "hi",
+                            "email": None, "replied_at": None})
+    db.init_db(conn)
+    answered = dict(conn.execute("SELECT post_id, answered_at FROM actions").fetchall())
+    assert set(answered) == {"facebook_1"} and answered["facebook_1"]
+    conn.close()

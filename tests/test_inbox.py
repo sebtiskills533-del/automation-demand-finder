@@ -23,6 +23,7 @@ from app.muse.job import (
 )
 from app.muse.parse import REPLIES, is_complete, parse_block
 from app.privacy import extract_email, is_valid_email
+from tests.conftest import make_analysis
 from tests.fakes import FakeAnthropic, fake_message
 
 FB_POST = "https://www.facebook.com/groups/1129871225741454/?multi_permalinks=1471413221587251&hoisted=x"
@@ -96,6 +97,35 @@ def test_replies_are_linked_to_posts_and_counted(conn):
     store.mark_replies_seen(conn, [r["id"] for r in store.list_replies(conn)])
     assert store.unseen_reply_count(conn) == 0
     assert store.list_replies(conn, unseen_only=True) == []
+
+
+def test_a_linked_reply_ticks_the_post_as_answered(conn):
+    post_id = seed_fb_post(conn)
+    store.save_analysis(conn, make_analysis(post_id))
+    assert store.get_post_details(conn, post_id)["answered_at"] is None
+    ingest_replies(conn, parse_block(REPLIES_ANSWER, REPLIES, 100).rows)
+    first = store.get_post_details(conn, post_id)["answered_at"]
+    assert first
+    assert [p["id"] for p in store.answered_posts(conn)] == [post_id]
+    # A later reply never moves the date, and an untick by the user is respected until a new reply.
+    store.set_answered(conn, post_id, False)
+    assert store.get_post_details(conn, post_id)["answered_at"] is None
+
+
+def test_replies_can_be_ticked_and_unticked_and_filtered(conn):
+    seed_fb_post(conn)
+    ingest_replies(conn, parse_block(REPLIES_ANSWER, REPLIES, 100).rows)
+    ids = [r["id"] for r in store.list_replies(conn)]
+    store.mark_replies_seen(conn, ids[:1])
+    assert [r["id"] for r in store.list_replies(conn, seen=True)] == ids[:1]
+    assert [r["id"] for r in store.list_replies(conn, seen=False)] == ids[1:]
+    store.mark_replies_seen(conn, ids[:1], seen=False)
+    assert store.unseen_reply_count(conn) == 2
+    platforms = {r["platform"] for r in store.list_replies(conn)}
+    assert len(store.list_replies(conn, platforms=tuple(platforms))) == 2
+    assert store.list_replies(conn, platforms=("hackernews",)) == []
+    with pytest.raises(ValueError):
+        store.list_replies(conn, platforms=("myspace",))
 
 
 def test_same_reply_twice_is_saved_once(conn):

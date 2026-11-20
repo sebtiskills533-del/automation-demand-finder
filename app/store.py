@@ -167,7 +167,7 @@ def delete_analyses(conn: sqlite3.Connection, post_ids: Iterable[str]) -> int:
 
 # -------------------------------------------------------------- actions
 
-_ACTION_FIELDS = ("status", "path", "notes", "reply_draft")
+_ACTION_FIELDS = ("status", "path", "notes", "reply_draft", "answered_at")
 
 
 def update_action(conn: sqlite3.Connection, post_id: str, **changes: str | None) -> None:
@@ -194,6 +194,11 @@ def update_action(conn: sqlite3.Connection, post_id: str, **changes: str | None)
         if len(draft) > MAX_REPLY_CHARS:
             raise ValueError(f"A reply can be at most {MAX_REPLY_CHARS} characters")
         changes["reply_draft"] = draft
+    if changes.get("answered_at") is not None:
+        try:  # must be a real time
+            changes["answered_at"] = to_iso(datetime.fromisoformat(str(changes["answered_at"]).replace("Z", "+00:00")))
+        except ValueError:
+            raise ValueError("answered_at must be an ISO date-time") from None
 
     columns = [field for field in _ACTION_FIELDS if field in changes]  # fixed names only
     placeholders = ", ".join("?" for _ in columns)
@@ -209,6 +214,21 @@ def update_action(conn: sqlite3.Connection, post_id: str, **changes: str | None)
             )
         except sqlite3.IntegrityError as exc:
             raise ValueError(f"No post with id {post_id!r}") from exc
+
+
+def set_answered(conn: sqlite3.Connection, post_id: str, answered: bool) -> None:
+    """Tick (or untick) "I answered this post"."""
+    update_action(conn, post_id, answered_at=to_iso(utc_now()) if answered else None)
+
+
+def mark_answered_if_unset(conn: sqlite3.Connection, post_id: str, when: str) -> None:
+    """A reply came in for this post, so the user must have answered it. Never unticks."""
+    with transaction(conn):
+        conn.execute(
+            """INSERT INTO actions (post_id, answered_at, updated_at) VALUES (?, ?, ?)
+               ON CONFLICT (post_id) DO UPDATE SET answered_at = COALESCE(actions.answered_at, excluded.answered_at)""",
+            (post_id, when, to_iso(utc_now())),
+        )
 
 
 # ------------------------------------------------------------ dashboard
@@ -227,6 +247,7 @@ class DashboardFilters:
     min_seriousness: int = 1
     buildable_only: bool = False
     search: str = ""
+    answered: bool | None = None  # True = only answered, False = only not answered
 
 
 _DASHBOARD_SELECT = """
@@ -236,7 +257,7 @@ _DASHBOARD_SELECT = """
            a.region_hint, a.reason, a.delivery_min_days, a.delivery_max_days,
            a.contact_method, a.opportunity_score, a.model, a.service,
            COALESCE(ac.status, ?) AS status, ac.path, COALESCE(ac.notes, '') AS notes,
-           COALESCE(ac.reply_draft, '') AS reply_draft, a.cluster_id
+           COALESCE(ac.reply_draft, '') AS reply_draft, a.cluster_id, ac.answered_at
     FROM posts p
     JOIN analyses a ON a.post_id = p.id
     LEFT JOIN actions ac ON ac.post_id = p.id
@@ -262,6 +283,8 @@ def _dashboard_where(filters: DashboardFilters) -> tuple[str, list[object]]:
     in_list("COALESCE(ac.status, 'New')", filters.statuses, STATUSES)
     if filters.buildable_only:
         clauses.append("a.buildable = 1")
+    if filters.answered is not None:
+        clauses.append("ac.answered_at IS NOT NULL" if filters.answered else "ac.answered_at IS NULL")
     search = filters.search.strip()[:100]
     if search:
         # Escape LIKE wildcards so the search text is matched literally.
@@ -560,15 +583,32 @@ def save_reply(conn: sqlite3.Connection, reply: dict) -> bool:
 
 
 def list_replies(
-    conn: sqlite3.Connection, *, post_id: str | None = None, unseen_only: bool = False, limit: int = 200
+    conn: sqlite3.Connection,
+    *,
+    post_id: str | None = None,
+    unseen_only: bool = False,
+    seen: bool | None = None,
+    platforms: tuple[str, ...] = (),
+    limit: int = 200,
 ) -> list[dict]:
-    """Replies, newest first, with the title of the post they answer (if known)."""
+    """Replies, newest first, with the title of the post they answer (if known).
+
+    seen: True = only ones the user ticked as seen, False = only not seen yet.
+    """
     clauses, params = [], []
     if post_id is not None:
         clauses.append("r.post_id = ?")
         params.append(post_id)
     if unseen_only:
-        clauses.append("r.seen = 0")
+        seen = False
+    if seen is not None:
+        clauses.append("r.seen = ?")
+        params.append(int(seen))
+    if platforms:
+        if not set(platforms) <= set(PLATFORM_NAMES):
+            raise ValueError("Invalid platform filter")
+        clauses.append(f"r.platform IN ({', '.join('?' for _ in platforms)})")
+        params.extend(platforms)
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     rows = conn.execute(
         """SELECT r.*, p.title AS post_title FROM replies r
@@ -593,9 +633,31 @@ def unseen_reply_count(conn: sqlite3.Connection, post_id: str | None = None) -> 
     return conn.execute("SELECT COUNT(*) FROM replies WHERE seen = 0 AND post_id = ?", (post_id,)).fetchone()[0]
 
 
-def mark_replies_seen(conn: sqlite3.Connection, reply_ids: Iterable[int]) -> None:
+def mark_replies_seen(conn: sqlite3.Connection, reply_ids: Iterable[int], seen: bool = True) -> None:
+    """Tick (or untick) replies as seen. Only the user does this; opening a reply doesn't."""
     with transaction(conn):
-        conn.executemany("UPDATE replies SET seen = 1 WHERE id = ?", [(int(i),) for i in reply_ids])
+        conn.executemany("UPDATE replies SET seen = ? WHERE id = ?", [(int(seen), int(i)) for i in reply_ids])
+
+
+def answered_posts(conn: sqlite3.Connection, limit: int = 300) -> list[dict]:
+    """Posts the user answered (ticked, or that got a reply), with their reply counts.
+
+    Posts with the newest replies come first, then the most recently answered.
+    """
+    rows = conn.execute(
+        """SELECT p.id, p.title, p.platform, p.url, ac.answered_at,
+                  COUNT(r.id) AS replies, COALESCE(SUM(r.seen = 0), 0) AS unseen,
+                  MAX(r.received_at) AS last_reply
+           FROM posts p
+           LEFT JOIN actions ac ON ac.post_id = p.id
+           LEFT JOIN replies r ON r.post_id = p.id
+           WHERE ac.answered_at IS NOT NULL OR r.id IS NOT NULL
+           GROUP BY p.id
+           ORDER BY last_reply IS NULL, last_reply DESC, ac.answered_at DESC
+           LIMIT ?""",
+        (limit,),
+    ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def save_email_draft(conn: sqlite3.Connection, reply_id: int, subject: str, body: str) -> None:

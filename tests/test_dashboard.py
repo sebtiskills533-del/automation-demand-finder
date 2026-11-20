@@ -275,6 +275,20 @@ def test_samjhao_tab_explains_only_when_clicked(env, monkeypatch):
     assert _by_label(at.button, "🔄 Dobara samjhao")
 
 
+def test_answered_tick_shows_in_table_and_view(env):
+    seed(env)
+    at = login()
+    _by_label(at.checkbox, "✅ Maine jawab bhej diya").check()
+    at = at.run()
+    assert not at.exception
+    with db.open_db(env) as conn:
+        assert store.get_post_details(conn, "reddit_0")["answered_at"]
+    at.segmented_control(key="quick_view").set_value("✅ Answered")
+    at = at.run()
+    assert not at.exception and "1 posts" in all_text(at)
+    assert any("Answered on" in c.value for c in at.caption)
+
+
 def test_ai_errors_are_shown_not_crashed(env):
     seed(env)
     at = login()  # no ANTHROPIC_API_KEY in the test environment
@@ -553,7 +567,8 @@ def _replies_page_app():
 
 def test_replies_page_empty_then_manual_reply_with_email(env):
     at = AppTest.from_function(_replies_page_app, default_timeout=TIMEOUT).run()
-    assert not at.exception and "No replies yet" in all_text(at)
+    assert not at.exception and "All caught up" in all_text(at)
+    assert "No answered posts yet" in all_text(at)
     _by_label(at.text_input, "Link to the conversation").input(FB_REPLY_URL)
     _by_label(at.text_input, "Their name").input("Sara")
     _by_label(at.text_area, "Their reply").input("Yes please, email me: sara@example.com")
@@ -564,7 +579,32 @@ def test_replies_page_empty_then_manual_reply_with_email(env):
     assert any(c.value == "sara@example.com" for c in at.code)  # shown, copyable
     assert any(b.label.startswith("Open the conversation") for b in at.get("link_button"))
     with db.open_db(env) as conn:
-        assert store.unseen_reply_count(conn) == 0  # opening it marked it read
+        assert store.unseen_reply_count(conn) == 1  # opening it does NOT mark it seen
+    _by_label(at.checkbox, "✅ Dekh liya").check()
+    at = at.run()
+    assert not at.exception
+    with db.open_db(env) as conn:
+        assert store.unseen_reply_count(conn) == 0  # the user's tick does
+    assert "All caught up" in all_text(at)       # gone from "Not seen yet"
+
+
+def test_replies_page_mark_all_seen_and_answered_posts(env):
+    with db.open_db(env) as conn:
+        store.save_post(conn, make_post("facebook_1", platform="facebook"))
+        for n in range(3):
+            store.save_reply(conn, {
+                "reply_key": f"k{n}", "post_id": "facebook_1" if n else None, "platform": "facebook",
+                "url": FB_REPLY_URL, "author": f"P{n}", "text": f"Reply {n}", "email": None,
+                "replied_at": None})
+    at = AppTest.from_function(_replies_page_app, default_timeout=TIMEOUT).run()
+    assert not at.exception
+    at = _click(at, "✅ Mark all 3 as seen")
+    assert not at.exception
+    with db.open_db(env) as conn:
+        assert store.unseen_reply_count(conn) == 0
+        posts = store.answered_posts(conn)
+    assert [(p["id"], p["replies"]) for p in posts] == [("facebook_1", 2)]
+    assert "1 posts you answered" in all_text(at)
 
 
 def test_replies_page_drafts_email_and_offers_mailto(env, monkeypatch):

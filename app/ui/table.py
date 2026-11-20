@@ -10,7 +10,7 @@ from app.services import badge_for
 from app.timeline import delivery_label
 from app.ui.components import status_text, verdict_text
 
-TABLE_COLUMNS = ["Verdict", "Score", "Service", "Title", "Delivery", "Seriousness", "Source", "Status", "Posted", "Post"]
+TABLE_COLUMNS = ["✅", "Verdict", "Score", "Service", "Title", "Delivery", "Seriousness", "Source", "Status", "Posted", "Post"]
 
 
 def stars(rating: int) -> str:
@@ -24,6 +24,7 @@ def build_table(rows: Sequence[Mapping]) -> pd.DataFrame:
     records = [
         {
             "id": r["id"],
+            "✅": "✅" if r.get("answered_at") else "",
             "Verdict": verdict_text(r["opportunity_score"]),
             "Score": r["opportunity_score"],
             "Service": badge_for(r.get("service")),

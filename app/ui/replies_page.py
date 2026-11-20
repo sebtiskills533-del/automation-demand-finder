@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import sqlite3
 
@@ -23,51 +24,108 @@ from app.ui.reply_widgets import reply_card
 log = logging.getLogger(__name__)
 
 
+VIEWS = {"🆕 Not seen yet": False, "📬 All": None, "✅ Seen": True}
+
+
 def render(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry) -> None:
     page_header(
         "🔔 Replies",
-        "Answers people sent to your posts and comments. An email is kept only when the person "
-        "wrote it in their reply to you.",
+        "Every reply people sent you, from every post you answered. Tick the ones you've seen. "
+        "An email is kept only when the person wrote it in their reply to you.",
     )
     _get_replies(conn, settings)
+    all_tab, posts_tab = st.tabs(["💬 All replies", "📝 Posts I answered"], key="replies_tabs")
+    with all_tab:
+        _all_replies(conn, settings, registry)
+    with posts_tab:
+        _answered_posts(conn)
 
-    # "All" by default: opening a reply marks it read, which would make it jump out of a "New" list.
-    view = st.segmented_control("Show", ["📬 All", "🆕 New"], default="📬 All", key="replies_view") or "📬 All"
-    replies = store.list_replies(conn, unseen_only=view == "🆕 New")
+
+def _all_replies(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry) -> None:
+    c1, c2 = st.columns([1.3, 1])
+    view = c1.segmented_control("Show", list(VIEWS), default="🆕 Not seen yet", key="replies_view") or "📬 All"
+    platforms = c2.multiselect("Platform", sorted(PLATFORM_NAMES), format_func=PLATFORM_NAMES.get,
+                               key="replies_platforms", placeholder="All platforms")
+    replies = store.list_replies(conn, seen=VIEWS[view], platforms=tuple(platforms), limit=500)
     if not replies:
         empty_state(
-            "No new replies" if view == "🆕 New" else "No replies yet",
+            "All caught up 🎉" if VIEWS[view] is False else "No replies here yet",
             "Check for replies with Muse above, or add one you received by hand.",
         )
         return
 
+    if VIEWS[view] is False and st.button(f"✅ Mark all {len(replies)} as seen", key="seen_all"):
+        store.mark_replies_seen(conn, [r["id"] for r in replies])
+        st.rerun()
+
     table = pd.DataFrame([
         {
-            "": "🆕" if not r["seen"] else "",
+            "Seen": bool(r["seen"]),
             "When": (r["replied_at"] or r["received_at"])[:10],
             "Platform": PLATFORM_NAMES.get(r["platform"], r["platform"]),
             "From": r["author"] or "Someone",
             "Reply": r["text"][:120],
             "Email": "✉️" if r["email"] else "",
             "About post": r["post_title"] or "",
+            "Link": r["url"],
         }
         for r in replies
     ])
-    event = st.dataframe(
-        table, hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row",
-        key=f"replies_{view}",
+    # The key follows the rows and their ticks, so a saved tick never lands on another row.
+    version = hashlib.sha1(repr([(r["id"], r["seen"]) for r in replies]).encode()).hexdigest()[:10]
+    edited = st.data_editor(
+        table, hide_index=True, width="stretch", key=f"replies_{version}",
+        disabled=[c for c in table.columns if c != "Seen"],
         column_config={
-            "": st.column_config.TextColumn("", width=40),
+            "Seen": st.column_config.CheckboxColumn("✅ Seen", width=70, help="Tick the replies you've read"),
             "Reply": st.column_config.TextColumn("Reply", width="large"),
             "Email": st.column_config.TextColumn("Email", width=60, help="✉️ = they shared an email"),
+            "Link": st.column_config.LinkColumn("Link", display_text="Open ↗", width=75),
         },
     )
-    rows = event.selection.rows if event and event.selection else []
-    if not rows:
-        st.caption("👆 Click a reply to read it and draft an email. Showing the newest one.")
-    reply = replies[rows[0] if rows and rows[0] < len(replies) else 0]
-    st.write("")
+    changed = [(r["id"], bool(new)) for r, new in zip(replies, edited["Seen"]) if bool(new) != bool(r["seen"])]
+    if changed:
+        for seen in (True, False):
+            store.mark_replies_seen(conn, [rid for rid, value in changed if value is seen], seen)
+        st.rerun()
+
+    labels = {r["id"]: f"{'🆕 ' if not r['seen'] else ''}{r['author'] or 'Someone'} · "
+                       f"{(r['replied_at'] or r['received_at'])[:10]} · {r['text'][:60]}" for r in replies}
+    chosen = st.selectbox("📖 Open a reply to read it and draft an email", list(labels),
+                          format_func=labels.get, key=f"open_reply_{view}")
+    reply = next(r for r in replies if r["id"] == chosen)
     reply_card(conn, settings, registry, reply)
+
+
+def _answered_posts(conn: sqlite3.Connection) -> None:
+    posts = store.answered_posts(conn)
+    if not posts:
+        empty_state("No answered posts yet",
+                    "Tick ✅ 'Maine jawab bhej diya' on a post after you answer it. "
+                    "Posts that get a reply are added automatically.")
+        return
+    st.caption(f"{len(posts)} posts you answered. Their replies are in 💬 All replies; "
+               "open a post on 🎯 Opportunities to see its replies in the 💬 Replies tab.")
+    st.dataframe(
+        pd.DataFrame([
+            {
+                "Post": p["title"],
+                "Platform": PLATFORM_NAMES.get(p["platform"], p["platform"]),
+                "Answered": (p["answered_at"] or "")[:10],
+                "Replies": p["replies"],
+                "New": f"🆕 {p['unseen']}" if p["unseen"] else "",
+                "Last reply": (p["last_reply"] or "")[:10],
+                "Link": p["url"],
+            }
+            for p in posts
+        ]),
+        hide_index=True, width="stretch",
+        column_config={
+            "Post": st.column_config.TextColumn("Post", width="large"),
+            "Replies": st.column_config.NumberColumn("Replies", width=70),
+            "Link": st.column_config.LinkColumn("Link", display_text="Open ↗", width=75),
+        },
+    )
 
 
 def _get_replies(conn: sqlite3.Connection, settings: Settings) -> None:

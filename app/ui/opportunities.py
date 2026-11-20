@@ -54,14 +54,15 @@ log = logging.getLogger(__name__)
 PAGE_SIZE = 50
 BEST_SCORE = 45
 
-# Quick views: (statuses to show, minimum score, platforms)
+# Quick views: (statuses to show, minimum score, platforms, answered: True/False/None = any)
 QUICK_VIEWS = {
-    "⭐ Best leads": (("New", "Ticked"), BEST_SCORE, ()),
-    "💼 Jobs": (("New", "Ticked"), 0, JOB_BOARD_PLATFORMS),
-    "🛠️ In progress": (("Ticked", "Building"), 0, ()),
-    "📋 All": ((), 0, ()),
-    "💰 Done & sold": (("Done", "Sold"), 0, ()),
-    "🚫 Skipped": (("Skipped",), 0, ()),
+    "⭐ Best leads": (("New", "Ticked"), BEST_SCORE, (), None),
+    "💼 Jobs": (("New", "Ticked"), 0, JOB_BOARD_PLATFORMS, None),
+    "✅ Answered": ((), 0, (), True),
+    "🛠️ In progress": (("Ticked", "Building"), 0, (), None),
+    "📋 All": ((), 0, (), None),
+    "💰 Done & sold": (("Done", "Sold"), 0, (), None),
+    "🚫 Skipped": (("Skipped",), 0, (), None),
 }
 
 
@@ -71,8 +72,9 @@ def render(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry
 
     view = st.segmented_control("Show", list(QUICK_VIEWS), default="⭐ Best leads", key="quick_view")
     view = view or "⭐ Best leads"
-    statuses, min_score, platforms = QUICK_VIEWS[view]
-    filters = replace(_sidebar_filters(settings.db_path, statuses, min_score), platforms=platforms)
+    statuses, min_score, platforms, answered = QUICK_VIEWS[view]
+    filters = replace(_sidebar_filters(settings.db_path, statuses, min_score),
+                      platforms=platforms, answered=answered)
 
     total = store.count_dashboard_rows(conn, filters)
     if total == 0:
@@ -152,8 +154,9 @@ def _table(rows: list[dict], key: str) -> dict:
         height=min(40 + 35 * len(table), 460),
         on_select="rerun",
         selection_mode="single-row",
-        column_order=["Verdict", "Score", "Service", "Title", "Delivery", "Source", "Status", "Post"],
+        column_order=["✅", "Verdict", "Score", "Service", "Title", "Delivery", "Source", "Status", "Post"],
         column_config={
+            "✅": cc.TextColumn("✅", width=40, help="✅ = you answered this post"),
             "Verdict": cc.TextColumn("Verdict", width=125),
             "Score": cc.ProgressColumn("Score", min_value=0, max_value=100, format="%d", width=85),
             "Service": cc.TextColumn("Service", width=110),
@@ -186,7 +189,9 @@ def _details(conn: sqlite3.Connection, settings: Settings, registry: ModelRegist
         st.caption(f"{md_escape(post['source'])} · posted {post['posted_at'][:10]} · "
                    f"by {md_escape(post['author_handle'] or 'unknown')}")
         _badges(post)
-        st.link_button(f"Open the original post on {PLATFORM_NAMES[post['platform']]} ↗", post["url"])
+        c1, c2 = st.columns([1.4, 1])
+        c1.link_button(f"Open the original post on {PLATFORM_NAMES[post['platform']]} ↗", post["url"])
+        _answered_tick(conn, post, c2)
 
         new_replies = store.unseen_reply_count(conn, post_id)
         replies_label = f"💬 Replies ({new_replies} new)" if new_replies else "💬 Replies"
@@ -206,6 +211,21 @@ def _details(conn: sqlite3.Connection, settings: Settings, registry: ModelRegist
             _track_tab(conn, post)
         with answers:
             _answers_tab(conn, settings, registry, post_id)
+
+
+def _answered_tick(conn: sqlite3.Connection, post: dict, where) -> None:
+    """"I answered this post": shows ✅ in the table and in the ✅ Answered view."""
+    answered = bool(post.get("answered_at"))
+    ticked = where.checkbox(
+        "✅ Maine jawab bhej diya (answered)", value=answered, key=f"answered_{post['id']}",
+        help="Tick after you post your answer. Posts that get a reply are ticked automatically.",
+    )
+    if ticked != answered:
+        store.set_answered(conn, post["id"], ticked)
+        st.toast("Marked as answered ✅" if ticked else "Answered tick removed", icon="✅" if ticked else "↩️")
+        st.rerun()
+    if answered:
+        where.caption(f"Answered on {post['answered_at'][:10]}")
 
 
 def _badges(post: dict) -> None:

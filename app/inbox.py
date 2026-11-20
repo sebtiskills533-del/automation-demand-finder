@@ -79,6 +79,8 @@ def ingest_replies(
             report.added += 1
             report.with_email += reply["email"] is not None
             report.linked += reply["post_id"] is not None
+            if reply["post_id"]:
+                store.mark_answered_if_unset(conn, reply["post_id"], to_iso(moment))
         else:
             report.duplicates += 1
     return report

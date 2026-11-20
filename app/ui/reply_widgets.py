@@ -22,18 +22,28 @@ log = logging.getLogger(__name__)
 
 
 def reply_card(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry, reply: dict) -> None:
-    """Show a reply (marking it as seen) with its email tools."""
-    if not reply["seen"]:
-        store.mark_replies_seen(conn, [reply["id"]])
+    """Show a reply with a "seen" tick (only the user ticks it) and its email tools."""
     with st.container(border=True):
         when = (reply["replied_at"] or reply["received_at"])[:10]
         platform = PLATFORM_NAMES.get(reply["platform"], reply["platform"])
         st.markdown(f"#### 💬 {md_escape(reply['author'] or 'Someone')} replied on {platform}")
         st.caption(f"{when}" + (f" · about: {md_escape(reply['post_title'])}" if reply.get("post_title") else ""))
         st.text(reply["text"])  # their words, shown literally
-        st.link_button(f"Open the conversation on {platform} ↗", reply["url"])
+        c1, c2 = st.columns([1.4, 1])
+        c1.link_button(f"Open the conversation on {platform} ↗", reply["url"])
+        seen_tick(conn, reply, c2)
         st.divider()
         _email_section(conn, settings, registry, reply)
+
+
+def seen_tick(conn: sqlite3.Connection, reply: dict, where) -> None:
+    """"I've seen this reply" tick. Unticked replies count as new."""
+    seen = bool(reply["seen"])
+    ticked = where.checkbox("✅ Dekh liya (seen)", value=seen, key=f"seen_{reply['id']}",
+                            help="Tick when you've read it. Unticked replies stay in 🆕 Not seen yet.")
+    if ticked != seen:
+        store.mark_replies_seen(conn, [reply["id"]], ticked)
+        st.rerun()
 
 
 def _email_section(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry, reply: dict) -> None:
