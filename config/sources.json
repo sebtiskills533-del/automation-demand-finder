@@ -70,5 +70,48 @@
       "name": "Digital Point forums",
       "feed_url": "https://forums.digitalpoint.com/forums/-/index.rss"
     }
-  ]
+  ],
+  "job_boards": {
+    "_note": "Official public feeds/APIs only. Upwork, Fiverr, PeoplePerHour, Guru etc. have none: use them by hand (see the Platforms page).",
+    "freelancer": {
+      "queries": [
+        "seo",
+        "local seo",
+        "google business profile",
+        "etsy",
+        "zapier",
+        "make.com",
+        "n8n",
+        "google sheets",
+        "automation"
+      ],
+      "per_query": 20
+    },
+    "remoteok": {
+      "tags": [
+        "seo"
+      ]
+    },
+    "remotive": {
+      "searches": [
+        "seo",
+        "automation"
+      ]
+    },
+    "himalayas": {
+      "searches": [
+        "seo",
+        "automation",
+        "zapier"
+      ]
+    },
+    "weworkremotely": {
+      "categories": [
+        "remote-sales-and-marketing-jobs"
+      ]
+    },
+    "workingnomads": {
+      "enabled": true
+    }
+  }
 }

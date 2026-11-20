@@ -1,0 +1,106 @@
+{
+  "_note": "Freelancing platforms sorted for YOUR services (automation, Etsy, SEO, local SEO) as a beginner. 'connected' = the app reads its jobs automatically (official feed/API). Edit freely.",
+  "groups": [
+    {
+      "id": "connected",
+      "title": "✅ Connected: the app finds jobs here automatically",
+      "help": "Official public feeds or APIs. New jobs appear in Opportunities under 💼 Jobs every daily run.",
+      "platforms": [
+        ["Freelancer.com", "Freelance gigs with budgets; many accept beginners. Send a proposal (bid)."],
+        ["Remote OK", "Remote jobs; the app searches SEO roles."],
+        ["Remotive", "Remote jobs; the app searches SEO and automation."],
+        ["Himalayas", "Remote jobs incl. internships and junior roles; searches SEO, automation, Zapier."],
+        ["We Work Remotely", "Remote jobs; the app reads the Sales & Marketing feed (SEO roles)."],
+        ["Working Nomads", "Remote jobs; the app keeps the ones matching your skills."]
+      ]
+    },
+    {
+      "id": "good_fit",
+      "title": "🟢 Good fit: create a profile or gigs yourself",
+      "help": "No public feed (or reading it would break their rules and risk your account), so use these by hand. Buyers come to you once your profile is set up.",
+      "platforms": [
+        ["Fiverr", "Best start: fixed-price gigs (Etsy SEO, Google Business Profile, automations)."],
+        ["Upwork", "Biggest marketplace; send proposals for Etsy SEO, local SEO, Zapier/Make jobs."],
+        ["PeoplePerHour", "UK-focused; post 'Offers' (fixed packages) and answer job posts."],
+        ["Guru", "Smaller marketplace; free profile, quote on SEO and automation jobs."],
+        ["Contra", "Commission-free; good for a portfolio of automation and SEO projects."],
+        ["Truelancer", "India-friendly marketplace with small SEO and automation projects."],
+        ["Workana", "Latin America focused; Spanish/Portuguese clients."],
+        ["Malt", "Europe (France, Germany...); profile-based, clients contact you."],
+        ["Twine", "Creative and marketing gigs; some SEO work."],
+        ["Zeerk", "Micro-gigs (like Fiverr); quick SEO tasks."],
+        ["GigBucks", "Micro-gigs; small SEO packages."],
+        ["Hubstaff Talent", "Free job board for remote freelancers; profile-based."],
+        ["FreeUp", "Vetted network for e-commerce and marketing freelancers (Etsy/Shopify)."],
+        ["SolidGigs", "Paid weekly list of hand-picked freelance gigs; can save search time."],
+        ["Flexing It", "India consulting/freelance projects."],
+        ["Freelancermap", "Germany-focused project board."],
+        ["Useme", "Poland-focused freelance projects."],
+        ["Bark", "Local service leads (great for local SEO / Google Business Profile clients)."],
+        ["Thumbtack", "US local services leads; marketing/SEO category."],
+        ["Airtasker", "Australia; small online tasks incl. SEO and spreadsheets."],
+        ["LinkedIn Jobs", "Search 'Etsy SEO', 'local SEO', 'automation' contract roles; also post your wins."],
+        ["Indeed", "Search part-time/contract SEO and automation roles."],
+        ["Wellfound", "Startups hiring growth/SEO and ops automation people."],
+        ["OnlineJobs.ph", "Clients hiring remote assistants; SEO and automation VA roles."],
+        ["CloudPeeps", "Marketing freelancers (SEO, content)."]
+      ]
+    },
+    {
+      "id": "later",
+      "title": "🟡 Later: vetted or senior platforms",
+      "help": "These screen hard or want years of experience. Come back after a few clients and reviews.",
+      "platforms": [
+        ["Toptal", "Top 3% screening; senior only."],
+        ["MarketerHire", "Vetted senior marketers (SEO)."],
+        ["Braintrust", "Vetted tech/marketing talent network."],
+        ["A.Team", "Senior product teams."],
+        ["Catalant", "Consultants for enterprises."],
+        ["Gun.io", "Vetted senior developers."],
+        ["Arc", "Vetted remote developers."],
+        ["Turing", "Vetted remote developers (technical tests)."],
+        ["Andela", "Vetted engineers."],
+        ["X-Team", "Senior developers."],
+        ["Lemon.io", "Vetted developers."],
+        ["Codeable", "WordPress experts (SEO plugins/sites) after experience."],
+        ["Gigster", "Managed software projects."],
+        ["Crossover", "Full-time remote roles with tests."],
+        ["Worksome", "Enterprise freelancer management."],
+        ["YunoJuno", "UK creative/tech freelancers with experience."],
+        ["Working Not Working", "Creative professionals portfolio network."]
+      ]
+    },
+    {
+      "id": "not_your_skills",
+      "title": "⚪ Not your skills right now",
+      "help": "Design, writing, translation, voice, tutoring, micro-tasks and staffing agencies. Useful only if you add those services.",
+      "platforms": [
+        ["99designs", "Design contests."], ["DesignCrowd", "Design."], ["CrowdSpring", "Design."],
+        ["Designhill", "Design."], ["Behance", "Design portfolio."], ["Dribbble", "Design portfolio."],
+        ["Krop", "Creative jobs."], ["Coroflot", "Design jobs."], ["Creativepool", "Creative jobs."],
+        ["Topcoder", "Coding competitions."], ["Codementor", "Coding mentoring."],
+        ["ProBlogger Jobs", "Writing (some SEO writing)."], ["BloggingPro Jobs", "Writing."],
+        ["ClearVoice", "Writing (SEO content)."], ["Scripted", "Writing."], ["Constant Content", "Writing."],
+        ["WriterAccess", "Writing (SEO content)."], ["Skyword", "Writing."], ["Compose.ly", "Writing."],
+        ["nDash", "Writing."], ["ProZ", "Translation."], ["TranslatorsCafe", "Translation."],
+        ["Gengo", "Translation."], ["Unbabel", "Translation."], ["Smartcat", "Translation."],
+        ["Lionbridge", "Translation/AI data."], ["Voices", "Voice-over."], ["Voice123", "Voice-over."],
+        ["Voquent", "Voice-over."], ["ACX", "Audiobook narration."], ["Bodalgo", "Voice-over."],
+        ["Mandy", "Film/TV crew."], ["Backstage", "Acting."], ["ProductionHUB", "Video production."],
+        ["Clickworker", "Micro-tasks."], ["Amazon Mechanical Turk", "Micro-tasks."], ["Toloka", "Micro-tasks."],
+        ["Microworkers", "Micro-tasks."], ["Appen", "AI data tasks."], ["TELUS Digital", "AI data tasks."],
+        ["Outlier", "AI training tasks."], ["DataAnnotation", "AI training tasks."], ["OneForma", "AI data tasks."],
+        ["Remotasks", "AI data tasks."], ["Neevo", "AI data tasks."], ["Prolific", "Research studies."],
+        ["BELAY", "Virtual assistant agency (US)."], ["Time Etc", "Virtual assistant agency."],
+        ["Zirtual", "Virtual assistant agency."], ["VirtualStaff.ph", "Philippines VA board."],
+        ["Fancy Hands", "Small VA tasks."], ["Preply", "Tutoring."], ["Italki", "Language tutoring."],
+        ["Cambly", "English tutoring."], ["Wyzant", "Tutoring."], ["Tutor.com", "Tutoring."],
+        ["Superprof", "Tutoring."], ["Outschool", "Teaching classes."], ["Chegg", "Tutoring."],
+        ["TutorMe", "Tutoring."], ["Taskrabbit", "In-person tasks."], ["Field Nation", "On-site IT technicians."],
+        ["WorkMarket", "Enterprise contractors."], ["FlexJobs", "Paid remote job board (general)."],
+        ["Remote.co", "Remote jobs (general)."], ["Virtual Vocations", "Remote jobs (paid)."],
+        ["Jobspresso", "Remote jobs (general)."], ["SimplyHired", "General job board."], ["Jooble", "Job aggregator."]
+      ]
+    }
+  ]
+}

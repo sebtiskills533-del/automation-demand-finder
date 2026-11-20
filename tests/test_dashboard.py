@@ -473,6 +473,38 @@ def test_reply_tab_shows_both_styles_side_by_side(env):
     assert sum(b.label == "✨ Draft this style" for b in at.button) == 3
 
 
+def _platforms_page_app():
+    from app import db
+    from app.config import load_settings
+    from app.ui import platforms_page
+
+    with db.open_db(load_settings().db_path) as conn:
+        platforms_page.render(conn)
+
+
+def test_platforms_page_shows_groups_and_search(env):
+    at = AppTest.from_function(_platforms_page_app, default_timeout=TIMEOUT).run()
+    assert not at.exception
+    assert metric(at, "Connected automatically").value == "6"
+    assert len(at.expander) == 4
+    at.text_input[0].input("fiverr").run()
+    assert len(at.expander) == 1 and len(at.dataframe) == 1
+
+
+def test_jobs_quick_view(env):
+    from app.importer import import_rows
+
+    with db.open_db(env) as conn:
+        store.save_post(conn, make_post("freelancer_9", platform="freelancer", source="Freelancer.com",
+                                        title="GBP setup gig"))
+        store.save_analysis(conn, make_analysis("freelancer_9", opportunity_score=40))
+        import_rows(conn, [{"url": "https://www.quora.com/q1", "title": "Not a job board"}])
+    at = login()
+    at.segmented_control(key="quick_view").set_value("💼 Jobs").run()
+    assert not at.exception
+    assert "1 posts" in all_text(at) and "GBP setup gig" in all_text(at)
+
+
 # ---------------------------------------------------------------- replies
 
 FB_REPLY_URL = "https://www.facebook.com/groups/1/posts/2/?comment_id=3"

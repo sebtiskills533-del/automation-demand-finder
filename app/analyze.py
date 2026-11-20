@@ -77,6 +77,7 @@ Field rules:
 - wants_to_hire: true only if the post explicitly says hiring, will pay, budget, "DM me" or similar.
 - shares_own_website: true only if the author links their own business website or shop.
 - region_hint: only from explicit evidence in the post (a country or city name, currency such as GBP/EUR/INR/AUD, or agencies/laws such as HMRC, IRS, GST, VAT). Otherwise exactly "Unknown". Never guess from writing style or username.
+- Job board listings (Freelancer.com, Remote OK, Remotive, Himalayas, We Work Remotely, Working Nomads) start with "Job listing ·". They are hiring, so wants_to_hire is true. Judge how well the role suits a BEGINNER offering the services above: freelance gigs, small fixed-price projects, contract or part-time work, internships and junior roles in these services are good fits; senior, lead or full-time engineering roles, or roles outside these services, are not (buildable false, low seriousness for this freelancer). For a gig, est_hours is the work to deliver it.
 - Keep summary, seriousness_reason and reason to one short sentence each."""
 
 

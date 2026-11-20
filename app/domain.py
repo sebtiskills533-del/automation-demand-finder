@@ -18,7 +18,15 @@ PLATFORM_NAMES = {
     "linkedin": "LinkedIn",
     "x": "X (Twitter)",
     "web": "the website",
+    # Job boards and freelance marketplaces (app/sources/jobs.py):
+    "freelancer": "Freelancer.com",
+    "remoteok": "Remote OK",
+    "remotive": "Remotive",
+    "himalayas": "Himalayas",
+    "weworkremotely": "We Work Remotely",
+    "workingnomads": "Working Nomads",
 }
+JOB_BOARD_PLATFORMS = ("freelancer", "remoteok", "remotive", "himalayas", "weworkremotely", "workingnomads")
 
 # Website address -> platform, used for imported posts.
 _HOST_PLATFORMS = {

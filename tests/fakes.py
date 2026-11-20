@@ -13,7 +13,7 @@ class FakeResponse:
     def __init__(self, status_code: int = 200, body: str | bytes | dict = b"", headers=None):
         self.status_code = status_code
         self.headers = headers or {}
-        if isinstance(body, dict):
+        if isinstance(body, (dict, list)):
             body = json.dumps(body)
         self.content = body.encode() if isinstance(body, str) else body
 

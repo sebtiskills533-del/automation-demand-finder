@@ -9,6 +9,7 @@ from app.errors import ConfigError
 from app.sources.base import Source
 from app.sources.discourse import DiscourseSource
 from app.sources.hackernews import HackerNewsSource
+from app.sources.jobs import build_job_sources
 from app.sources.reddit import RedditSource
 from app.sources.rss_forum import RssForumSource
 from app.sources.stackexchange import StackExchangeSource
@@ -48,6 +49,8 @@ def load_sources(path: Path) -> list[Source]:
         for site in se.get("sites", []):
             for query in se.get("queries", []):
                 sources.append(StackExchangeSource(site, query, se_lookback, se_page))
+
+        sources += build_job_sources(config, _bounded_int)
 
         for forum in config.get("rss_forums", []):
             sources.append(RssForumSource(forum["name"], forum["feed_url"]))

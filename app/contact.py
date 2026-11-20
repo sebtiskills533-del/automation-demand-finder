@@ -6,7 +6,7 @@ or a business website's contact form the person shared publicly.
 
 from __future__ import annotations
 
-from app.domain import PLATFORM_NAMES
+from app.domain import JOB_BOARD_PLATFORMS, PLATFORM_NAMES
 
 
 # Tool-vendor forums often forbid advertising services in replies.
@@ -19,6 +19,10 @@ def contact_method(platform: str, wants_to_hire: bool, shares_own_website: bool)
         raise ValueError(f"Unknown platform {platform!r}")
     note = _FORUM_NOTE if platform == "forum" else ""
 
+    if platform == "freelancer":
+        return "Send a proposal (bid) on Freelancer.com: a short, specific plan for their project"
+    if platform in JOB_BOARD_PLATFORMS:
+        return f"Apply through the listing on {name} (use its Apply link) with a short, tailored message"
     if platform == "stackexchange":
         # No private messages, and answers that advertise services get deleted.
         return "Post a genuinely helpful answer on Stack Exchange (no self-promotion allowed there)"

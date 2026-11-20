@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import math
+from dataclasses import replace
 import sqlite3
 from datetime import timedelta
 from pathlib import Path
@@ -18,6 +19,7 @@ from app.cli import build_llm
 from app.config import Settings
 from app.domain import (
     DIFFICULTIES,
+    JOB_BOARD_PLATFORMS,
     MAX_NOTES_CHARS,
     MAX_REPLY_CHARS,
     PATHS,
@@ -51,13 +53,14 @@ log = logging.getLogger(__name__)
 PAGE_SIZE = 50
 BEST_SCORE = 45
 
-# Quick views: (statuses to show, minimum score)
+# Quick views: (statuses to show, minimum score, platforms)
 QUICK_VIEWS = {
-    "⭐ Best leads": (("New", "Ticked"), BEST_SCORE),
-    "🛠️ In progress": (("Ticked", "Building"), 0),
-    "📋 All": ((), 0),
-    "💰 Done & sold": (("Done", "Sold"), 0),
-    "🚫 Skipped": (("Skipped",), 0),
+    "⭐ Best leads": (("New", "Ticked"), BEST_SCORE, ()),
+    "💼 Jobs": (("New", "Ticked"), 0, JOB_BOARD_PLATFORMS),
+    "🛠️ In progress": (("Ticked", "Building"), 0, ()),
+    "📋 All": ((), 0, ()),
+    "💰 Done & sold": (("Done", "Sold"), 0, ()),
+    "🚫 Skipped": (("Skipped",), 0, ()),
 }
 
 
@@ -67,8 +70,8 @@ def render(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry
 
     view = st.segmented_control("Show", list(QUICK_VIEWS), default="⭐ Best leads", key="quick_view")
     view = view or "⭐ Best leads"
-    statuses, min_score = QUICK_VIEWS[view]
-    filters = _sidebar_filters(settings.db_path, statuses, min_score)
+    statuses, min_score, platforms = QUICK_VIEWS[view]
+    filters = replace(_sidebar_filters(settings.db_path, statuses, min_score), platforms=platforms)
 
     total = store.count_dashboard_rows(conn, filters)
     if total == 0:

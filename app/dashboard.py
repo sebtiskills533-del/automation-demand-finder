@@ -26,7 +26,14 @@ from app.config import Settings, load_settings  # noqa: E402
 from app.errors import AppError  # noqa: E402
 from app.logging_setup import setup_logging  # noqa: E402
 from app.models_registry import ModelRegistry, load_registry  # noqa: E402
-from app.ui import import_page, opportunities, problems_page, replies_page, settings_page  # noqa: E402
+from app.ui import (  # noqa: E402
+    import_page,
+    opportunities,
+    platforms_page,
+    problems_page,
+    replies_page,
+    settings_page,
+)
 from app.ui.components import apply_page_style  # noqa: E402
 from app.ui.login import logout_button, require_login  # noqa: E402
 
@@ -85,6 +92,7 @@ def main() -> None:
                     title="Top problems", icon="🧩", url_path="problems"),
             st.Page(lambda: import_page.render(conn, settings, registry),
                     title="Import posts", icon="📥", url_path="import"),
+            st.Page(lambda: platforms_page.render(conn), title="Platforms", icon="🧭", url_path="platforms"),
             st.Page(lambda: settings_page.render(conn, settings, registry),
                     title="Settings & costs", icon="⚙️", url_path="settings"),
         ]

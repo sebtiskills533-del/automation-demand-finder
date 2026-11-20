@@ -21,6 +21,7 @@ from app.domain import (
     MAX_REPLY_CHARS,
     MAX_TITLE_CHARS,
     PATHS,
+    PLATFORM_NAMES,
     REPORT_VERDICTS,
     STATUSES,
     AnalysisRecord,
@@ -220,6 +221,7 @@ class DashboardFilters:
     difficulties: tuple[str, ...] = ()
     sources: tuple[str, ...] = ()
     services: tuple[str, ...] = ()
+    platforms: tuple[str, ...] = ()
     statuses: tuple[str, ...] = ()
     min_score: int = 0
     min_seriousness: int = 1
@@ -256,6 +258,7 @@ def _dashboard_where(filters: DashboardFilters) -> tuple[str, list[object]]:
     in_list("a.difficulty", filters.difficulties, DIFFICULTIES)
     in_list("p.source", filters.sources, None)
     in_list("a.service", filters.services, None)
+    in_list("p.platform", filters.platforms, PLATFORM_NAMES)
     in_list("COALESCE(ac.status, 'New')", filters.statuses, STATUSES)
     if filters.buildable_only:
         clauses.append("a.buildable = 1")
