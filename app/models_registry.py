@@ -23,6 +23,7 @@ TASKS = {
     "spec": "Product specs",
     "email": "Email drafts",
     "explain": "Job explanations (Roman Urdu)",
+    "portfolio": "Portfolio project picks",
 }
 
 _SETTING_PREFIX = "model."

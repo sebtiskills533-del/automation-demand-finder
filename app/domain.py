@@ -122,6 +122,14 @@ class AnalysisRecord:
     opportunity_score: int
     model: str
     service: str = "automation"
+    tech_level: str | None = None  # one of TECH_LEVELS; None = not judged yet (older posts)
+    tech_reason: str = ""
+
+
+# How much the person seems to know about tech. "non_technical" people (no IT background,
+# don't know the tools exist) are the freelancer's best potential customers.
+TECH_LEVELS = ("non_technical", "some", "technical")
+TECH_LABELS = {"non_technical": "🙋 Non-tech", "some": "🙂 Some tech", "technical": "🧑‍💻 Techie"}
 
 
 def utc_now() -> datetime:

@@ -59,13 +59,15 @@ app/
   clusters.py         v1.1 top problems (numbered lines in, numbers out)
   specs.py            v1.2 product specs per problem group
   inbox.py            replies people sent the user (linking, email-if-shared rule)
+  techlevel.py        judge who is non-tech for posts rated before analyses.tech_level existed (on click)
+  portfolio.py        🏆 portfolio picks from real posts (numbers in, numbers out; <= 30 h each)
   explain.py          'Samjhao' tab: Roman Urdu job explanation, only on click (explanations table)
   emails.py           email drafts for replies with a shared email (mailto, never sends)
   auth.py             password hashing + login lockout
   set_password.py     CLI to set the dashboard password
   dashboard.py        Streamlit entry point
   ui/                 dashboard pages (opportunities, replies_page, problems_page,
-                      import_page, platforms_page, settings_page), reply_widgets.py, background.py, components.py (badges, md_escape), assets/
+                      import_page, platforms_page, portfolio_page, settings_page), reply_widgets.py, background.py, components.py (badges, md_escape), assets/
                       Theme: .streamlit/config.toml (teal + amber).
 config/               sources.json, phrases.txt, models.json, services.json, platforms.json (user-editable)
 run_daily.py          the daily run

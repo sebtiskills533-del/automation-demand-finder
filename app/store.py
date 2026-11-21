@@ -24,6 +24,7 @@ from app.domain import (
     PLATFORM_NAMES,
     REPORT_VERDICTS,
     STATUSES,
+    TECH_LEVELS,
     AnalysisRecord,
     Post,
     to_iso,
@@ -115,8 +116,9 @@ def save_analysis(conn: sqlite3.Connection, record: AnalysisRecord) -> None:
                (post_id, summary, category, difficulty, tool, est_hours, buildable,
                 product_potential, seriousness, seriousness_reason, wants_to_hire,
                 shares_own_website, region_hint, reason, delivery_min_days,
-                delivery_max_days, contact_method, opportunity_score, model, analyzed_at, service)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                delivery_max_days, contact_method, opportunity_score, model, analyzed_at, service,
+                tech_level, tech_reason)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 record.post_id,
                 record.summary,
@@ -139,6 +141,8 @@ def save_analysis(conn: sqlite3.Connection, record: AnalysisRecord) -> None:
                 record.model,
                 to_iso(utc_now()),
                 record.service,
+                record.tech_level,
+                record.tech_reason,
             ),
         )
 
@@ -248,6 +252,7 @@ class DashboardFilters:
     buildable_only: bool = False
     search: str = ""
     answered: bool | None = None  # True = only answered, False = only not answered
+    tech_levels: tuple[str, ...] = ()
 
 
 _DASHBOARD_SELECT = """
@@ -257,7 +262,8 @@ _DASHBOARD_SELECT = """
            a.region_hint, a.reason, a.delivery_min_days, a.delivery_max_days,
            a.contact_method, a.opportunity_score, a.model, a.service,
            COALESCE(ac.status, ?) AS status, ac.path, COALESCE(ac.notes, '') AS notes,
-           COALESCE(ac.reply_draft, '') AS reply_draft, a.cluster_id, ac.answered_at
+           COALESCE(ac.reply_draft, '') AS reply_draft, a.cluster_id, ac.answered_at,
+           a.tech_level, a.tech_reason
     FROM posts p
     JOIN analyses a ON a.post_id = p.id
     LEFT JOIN actions ac ON ac.post_id = p.id
@@ -281,6 +287,7 @@ def _dashboard_where(filters: DashboardFilters) -> tuple[str, list[object]]:
     in_list("a.service", filters.services, None)
     in_list("p.platform", filters.platforms, PLATFORM_NAMES)
     in_list("COALESCE(ac.status, 'New')", filters.statuses, STATUSES)
+    in_list("a.tech_level", filters.tech_levels, TECH_LEVELS)
     if filters.buildable_only:
         clauses.append("a.buildable = 1")
     if filters.answered is not None:
@@ -375,6 +382,74 @@ def get_decision_report(conn: sqlite3.Connection, post_id: str) -> dict | None:
     report["reasons"] = json.loads(report["reasons"])
     report["plan"] = json.loads(report["plan"])
     return report
+
+
+# ------------------------------------------------------------- tech level
+
+
+def posts_missing_tech_level(conn: sqlite3.Connection, limit: int) -> list[dict]:
+    """Rated posts whose tech level was never judged (rated before the feature), best first."""
+    rows = conn.execute(
+        """SELECT p.id, p.platform, p.title, a.summary FROM analyses a JOIN posts p ON p.id = a.post_id
+           WHERE a.tech_level IS NULL ORDER BY a.opportunity_score DESC, p.posted_at DESC LIMIT ?""",
+        (limit,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def count_missing_tech_level(conn: sqlite3.Connection) -> int:
+    return conn.execute("SELECT COUNT(*) FROM analyses WHERE tech_level IS NULL").fetchone()[0]
+
+
+def set_tech_levels(conn: sqlite3.Connection, levels: Iterable[tuple[str, str, str]]) -> None:
+    """(post_id, tech_level, reason) for posts judged after their analysis."""
+    rows = []
+    for post_id, level, reason in levels:
+        if level not in TECH_LEVELS:
+            raise ValueError(f"Unknown tech level {level!r}")
+        rows.append((level, reason[:300], post_id))
+    with transaction(conn):
+        conn.executemany("UPDATE analyses SET tech_level = ?, tech_reason = ? WHERE post_id = ?", rows)
+
+
+# -------------------------------------------------------------- portfolio
+
+
+def portfolio_candidates(conn: sqlite3.Connection, since: datetime, limit: int) -> list[dict]:
+    """Recent real jobs to pick portfolio projects from: non-tech people first, then the
+    problems many people share (product potential), then the most serious."""
+    rows = conn.execute(
+        """SELECT p.id, p.title, p.url, p.platform, a.summary, a.service, a.category, a.tool,
+                  a.est_hours, a.difficulty, a.product_potential, a.seriousness, a.tech_level,
+                  c.name AS problem, (SELECT COUNT(*) FROM analyses x WHERE x.cluster_id = a.cluster_id) AS problem_posts
+           FROM analyses a JOIN posts p ON p.id = a.post_id
+           LEFT JOIN clusters c ON c.id = a.cluster_id
+           WHERE a.est_hours > 0 AND a.analyzed_at >= ?
+           ORDER BY (a.tech_level = 'non_technical') DESC, a.product_potential DESC,
+                    a.seriousness DESC, a.opportunity_score DESC
+           LIMIT ?""",
+        (to_iso(since), limit),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def save_portfolio_plan(conn: sqlite3.Connection, content: dict, model: str) -> int:
+    data = json.dumps(content, ensure_ascii=False)
+    if len(data) > 60_000:
+        raise ValueError("The portfolio plan is too long")
+    with transaction(conn):
+        cursor = conn.execute("INSERT INTO portfolio_plans (content, model, created_at) VALUES (?, ?, ?)",
+                              (data, model, to_iso(utc_now())))
+    return int(cursor.lastrowid)
+
+
+def latest_portfolio_plan(conn: sqlite3.Connection) -> dict | None:
+    row = conn.execute(
+        "SELECT id, content, model, created_at FROM portfolio_plans ORDER BY id DESC LIMIT 1").fetchone()
+    if row is None:
+        return None
+    return {"id": row["id"], "content": json.loads(row["content"]), "model": row["model"],
+            "created_at": row["created_at"]}
 
 
 # ----------------------------------------------------------- explanations

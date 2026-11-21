@@ -107,6 +107,8 @@ Logs from every run are in `logs/app.log`.
 | 🎯 **Opportunities** | Pick a view (⭐ Best leads, 🛠️ In progress, 📋 All…), click a post, then use the tabs: **Overview**, **💡 Samjhao** (click the button: Claude explains the job and how to do it in simple Roman Urdu, about Rs 2–3 each, saved after that), **✍️ Reply** (draft with Claude, edit, copy), **📋 Decision report** (after you tick it), **🗂️ Track** (status, path, notes) |
 | 🧩 **Top problems** | See requests that repeat, open one to see its posts, and click **📝 Write product spec** (download it for Claude Code) |
 | 💼 **Jobs** (a view on Opportunities) | Job-board listings rated for a beginner: small gigs, part-time and junior roles rank high, senior full-time roles low |
+| 🙋 **Non-tech people** (a view on Opportunities) | Posts from people with no IT background who don't know a tool could help: your best customers. The **Who** column shows 🙋 Non-tech / 🙂 Some tech / 🧑‍💻 Techie, with the reason in the post's Overview |
+| 🏆 **Portfolio** | Click **🏆 Pick my portfolio projects**: Claude picks 4–6 projects from your real posts (non-tech people first) that build trust and stay useful for years, each with why, skills, tools, hours, how to show it, a Roman Urdu note and the real posts it answers (about Rs 3–6 a click) |
 | 🧭 **Platforms** | All the freelancing platforms you listed, grouped: connected automatically, good fit (use by hand, e.g. Fiverr, Upwork), later, not your skills. Edit config/platforms.json |
 | 📥 **Import posts** | Add posts you found yourself, rate them, or start a Muse collection |
 | ⚙️ **Settings & costs** | This month's AI spending and which Claude model does each job |

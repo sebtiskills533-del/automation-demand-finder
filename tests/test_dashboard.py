@@ -289,6 +289,66 @@ def test_answered_tick_shows_in_table_and_view(env):
     assert any("Answered on" in c.value for c in at.caption)
 
 
+def _fake_llm_factory(*results):
+    from app.llm import ClaudeClient
+    from tests.fakes import FakeAnthropic
+
+    fake = FakeAnthropic(*results)
+
+    def build(settings, conn):
+        sink = lambda t, m, i, o, c: store.log_usage(conn, t, m, i, o, c)  # noqa: E731
+        return ClaudeClient("key", sink, client=fake)
+
+    return build, fake
+
+
+def test_non_tech_view_and_older_post_check(env, monkeypatch):
+    from app.ui import opportunities
+    from tests.fakes import fake_message
+
+    seed(env)  # rated before tech level existed
+    answer = {"items": [{"number": n, "tech_level": "non_technical" if n == 1 else "technical",
+                         "reason": "Does it by hand" if n == 1 else "Developer"} for n in (1, 2, 3)]}
+    build, fake = _fake_llm_factory(fake_message(answer))
+    monkeypatch.setattr(opportunities, "build_llm", build)
+    at = login()
+    assert "3 older posts" in all_text(at)
+    at = _click(at, "🔎 Check them")
+    assert not at.exception and len(fake.calls) == 1
+    assert "older posts" not in all_text(at)
+    at.segmented_control(key="quick_view").set_value("🙋 Non-tech people")
+    at = at.run()
+    assert not at.exception and "1 posts" in all_text(at)
+    assert "Does it by hand" in all_text(at)
+
+
+def test_portfolio_page_picks_only_on_click(env, monkeypatch):
+    from app.ui import portfolio_page
+    from tests.fakes import fake_message
+    from tests.test_portfolio import PLAN
+
+    seed(env, 4)
+    build, fake = _fake_llm_factory(fake_message(PLAN))
+    monkeypatch.setattr(portfolio_page, "build_llm", build)
+    at = AppTest.from_function(_portfolio_page_app, default_timeout=TIMEOUT).run()
+    assert not at.exception and "No portfolio plan yet" in all_text(at) and fake.calls == []
+    at = _click(at, "🏆 Pick my portfolio projects")
+    assert not at.exception and len(fake.calls) == 1
+    assert "Etsy orders to Google Sheet" in all_text(at)
+    assert _by_label(at.button, "🔄 Pick again")
+
+
+def _portfolio_page_app():
+    from app import db
+    from app.config import load_settings
+    from app.models_registry import load_registry
+    from app.ui import portfolio_page
+
+    settings = load_settings()
+    with db.open_db(settings.db_path) as conn:
+        portfolio_page.render(conn, settings, load_registry(settings.models_file))
+
+
 def test_ai_errors_are_shown_not_crashed(env):
     seed(env)
     at = login()  # no ANTHROPIC_API_KEY in the test environment

@@ -35,6 +35,8 @@ GOOD = {
     "shares_own_website": False,
     "region_hint": "United Kingdom",
     "reason": "Simple trigger and append",
+    "tech_level": "non_technical",
+    "tech_reason": "Copies orders by hand and asks if there is a way",
 }
 
 

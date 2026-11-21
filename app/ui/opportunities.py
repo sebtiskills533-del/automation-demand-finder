@@ -9,6 +9,7 @@ from dataclasses import replace
 import sqlite3
 from datetime import timedelta
 from pathlib import Path
+from typing import NamedTuple
 
 import pandas as pd
 import streamlit as st
@@ -25,11 +26,13 @@ from app.domain import (
     PATHS,
     PLATFORM_NAMES,
     STATUSES,
+    TECH_LABELS,
     TICKED_STATUSES,
     utc_now,
 )
 from app.errors import AppError
 from app.explain import explain_job
+from app.techlevel import judge_missing
 from app.models_registry import ModelRegistry
 from app.replies import draft_reply
 from app.reports import make_report
@@ -54,15 +57,23 @@ log = logging.getLogger(__name__)
 PAGE_SIZE = 50
 BEST_SCORE = 45
 
-# Quick views: (statuses to show, minimum score, platforms, answered: True/False/None = any)
+class View(NamedTuple):
+    statuses: tuple[str, ...] = ()
+    min_score: int = 0
+    platforms: tuple[str, ...] = ()
+    answered: bool | None = None  # None = answered or not
+    tech_levels: tuple[str, ...] = ()
+
+
 QUICK_VIEWS = {
-    "⭐ Best leads": (("New", "Ticked"), BEST_SCORE, (), None),
-    "💼 Jobs": (("New", "Ticked"), 0, JOB_BOARD_PLATFORMS, None),
-    "✅ Answered": ((), 0, (), True),
-    "🛠️ In progress": (("Ticked", "Building"), 0, (), None),
-    "📋 All": ((), 0, (), None),
-    "💰 Done & sold": (("Done", "Sold"), 0, (), None),
-    "🚫 Skipped": (("Skipped",), 0, (), None),
+    "⭐ Best leads": View(("New", "Ticked"), BEST_SCORE),
+    "🙋 Non-tech people": View(("New", "Ticked"), tech_levels=("non_technical",)),
+    "💼 Jobs": View(("New", "Ticked"), platforms=JOB_BOARD_PLATFORMS),
+    "✅ Answered": View(answered=True),
+    "🛠️ In progress": View(("Ticked", "Building")),
+    "📋 All": View(),
+    "💰 Done & sold": View(("Done", "Sold")),
+    "🚫 Skipped": View(("Skipped",)),
 }
 
 
@@ -72,9 +83,13 @@ def render(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry
 
     view = st.segmented_control("Show", list(QUICK_VIEWS), default="⭐ Best leads", key="quick_view")
     view = view or "⭐ Best leads"
-    statuses, min_score, platforms, answered = QUICK_VIEWS[view]
-    filters = replace(_sidebar_filters(settings.db_path, statuses, min_score),
-                      platforms=platforms, answered=answered)
+    chosen = QUICK_VIEWS[view]
+    filters = replace(_sidebar_filters(settings.db_path, chosen.statuses, chosen.min_score),
+                      platforms=chosen.platforms, answered=chosen.answered, tech_levels=chosen.tech_levels)
+    if view == "🙋 Non-tech people":
+        st.caption("People with no IT background who probably don't know a tool can solve their problem: "
+                   "your best potential customers.")
+    _tech_backfill(conn, settings, registry)
 
     total = store.count_dashboard_rows(conn, filters)
     if total == 0:
@@ -98,6 +113,29 @@ def render(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry
 
 
 # ------------------------------------------------------------------ top
+
+
+def _tech_backfill(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry) -> None:
+    """Older posts were rated before tech level existed: judge them once, on click."""
+    missing = store.count_missing_tech_level(conn)
+    if not missing:
+        return
+    with st.container(border=True):
+        c1, c2 = st.columns([3, 1.2])
+        cost = max(1, round(missing / 40 * 0.0015 * settings.usd_to_inr))
+        c1.caption(f"🔎 {missing} older posts don't show yet whether the person is non-tech. "
+                   f"Check them once with {registry.model_for_task(conn, 'analyze').name} (about Rs {cost}).")
+        if c2.button("🔎 Check them", key="tech_backfill"):
+            report = None
+
+            def run():
+                nonlocal report
+                report = judge_missing(conn, build_llm(settings, conn), registry, settings)
+
+            if _run_ai(run, "Claude is checking who is non-tech..."):
+                st.toast(f"Checked {report.judged} posts" + (f", {report.left} left" if report.left else ""),
+                         icon="✅")
+                st.rerun()
 
 
 def _summary(conn: sqlite3.Connection, settings: Settings) -> None:
@@ -154,12 +192,13 @@ def _table(rows: list[dict], key: str) -> dict:
         height=min(40 + 35 * len(table), 460),
         on_select="rerun",
         selection_mode="single-row",
-        column_order=["✅", "Verdict", "Score", "Service", "Title", "Delivery", "Source", "Status", "Post"],
+        column_order=["✅", "Verdict", "Score", "Service", "Who", "Title", "Delivery", "Source", "Status", "Post"],
         column_config={
             "✅": cc.TextColumn("✅", width=40, help="✅ = you answered this post"),
             "Verdict": cc.TextColumn("Verdict", width=125),
             "Score": cc.ProgressColumn("Score", min_value=0, max_value=100, format="%d", width=85),
             "Service": cc.TextColumn("Service", width=110),
+            "Who": cc.TextColumn("Who", width=105, help="🙋 Non-tech = no IT background: your best customers"),
             "Title": cc.TextColumn("Title", width=250),
             "Delivery": cc.TextColumn("Delivery", width=95, help="Days to promise (includes a safety margin)"),
             "Seriousness": cc.TextColumn("Serious", width=85, help="How real and committed the person seems"),
@@ -232,6 +271,8 @@ def _badges(post: dict) -> None:
     with st.container(horizontal=True, gap="small"):
         verdict_badge(post["opportunity_score"])
         st.badge(badge_for(post.get("service")), color="orange")
+        if post.get("tech_level") == "non_technical":
+            st.badge("🙋 Non-tech · potential customer", color="green")
         st.badge(delivery_label(post["delivery_min_days"], post["delivery_max_days"],
                                 post["difficulty"], post["est_hours"]),
                  icon=":material/schedule:", color="blue")
@@ -248,6 +289,8 @@ def _overview(post: dict) -> None:
         labelled_text("Why this seriousness rating", post["seriousness_reason"])
         labelled_text("Difficulty reasoning", post["reason"])
     with right:
+        if post.get("tech_level"):
+            labelled_text(f"Tech background: {TECH_LABELS[post['tech_level']]}", post["tech_reason"])
         labelled_text("Best tool", post["tool"])
         labelled_text("How to contact them (the allowed way)", post["contact_method"])
         labelled_text("Region (only if stated in the post)", post["region_hint"])

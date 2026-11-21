@@ -54,6 +54,9 @@ class PostAnalysis(BaseModel):
     shares_own_website: bool
     region_hint: str = Field(description="Country or region, only if stated in the post; else 'Unknown'.")
     reason: str = Field(description="One line explaining difficulty and buildability.")
+    tech_level: Literal["non_technical", "some", "technical"] = Field(
+        description="How much the person knows about tech, judged from the post.")
+    tech_reason: str = Field(description="One short sentence citing the evidence for tech_level.")
 
 
 SYSTEM_PROMPT = f"""You review public online posts for a beginner freelancer who works with Claude Code and offers these services: {offer_summary()}. For the post you are given, return the requested JSON.
@@ -78,7 +81,12 @@ Field rules:
 - shares_own_website: true only if the author links their own business website or shop.
 - region_hint: only from explicit evidence in the post (a country or city name, currency such as GBP/EUR/INR/AUD, or agencies/laws such as HMRC, IRS, GST, VAT). Otherwise exactly "Unknown". Never guess from writing style or username.
 - Job board listings (Freelancer.com, Remote OK, Remotive, Himalayas, We Work Remotely, Working Nomads) start with "Job listing ·". They are hiring, so wants_to_hire is true. Judge how well the role suits a BEGINNER offering the services above: freelance gigs, small fixed-price projects, contract or part-time work, internships and junior roles in these services are good fits; senior, lead or full-time engineering roles, or roles outside these services, are not (buildable false, low seriousness for this freelancer). For a gig, est_hours is the work to deliver it.
-- Keep summary, seriousness_reason and reason to one short sentence each."""
+- tech_level: does the PERSON WHO POSTED have an IT background? (The freelancer's best customers are people who don't.)
+  non_technical = no IT background: a shop owner, tradesperson, teacher or office worker who describes the problem in everyday words, does it by hand, doesn't know which tool could help, or asks "is there a way to...". Mentioning everyday apps (Excel, Google Sheets, Etsy, Gmail) is still non_technical.
+  some = uses tools like Zapier, Make or formulas, or has tried to build it, but is stuck.
+  technical = developer, IT or agency person: writes code, talks about APIs, scripts, webhooks or servers, or is a company hiring an engineer. Job board listings from companies are technical unless the listing clearly comes from a small non-tech business owner.
+- tech_reason: one short sentence with the evidence (e.g. "Copies orders by hand and asks if a tool exists").
+- Keep summary, seriousness_reason, reason and tech_reason to one short sentence each."""
 
 
 @dataclass
@@ -123,6 +131,8 @@ def to_record(post_id: str, platform: str, result: PostAnalysis, model_id: str) 
         shares_own_website=result.shares_own_website,
         region_hint=region,
         reason=result.reason.strip()[:_MAX_TEXT_FIELD],
+        tech_level=result.tech_level,
+        tech_reason=result.tech_reason.strip()[:_MAX_TEXT_FIELD],
         delivery_min_days=window.min_days if window else None,
         delivery_max_days=window.max_days if window else None,
         contact_method=contact_method(platform, result.wants_to_hire, result.shares_own_website),

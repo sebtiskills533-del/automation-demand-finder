@@ -209,9 +209,24 @@ INSERT INTO actions (post_id, answered_at, updated_at)
     ON CONFLICT (post_id) DO UPDATE SET answered_at = COALESCE(actions.answered_at, excluded.answered_at);
 """
 
+# analyses.tech_level/tech_reason: does the person have an IT background? (NULL = not judged).
+# portfolio_plans: Claude's picks of portfolio projects, newest first; content is JSON.
+_SCHEMA_V10 = """
+ALTER TABLE analyses ADD COLUMN tech_level TEXT
+    CHECK (tech_level IS NULL OR tech_level IN ('non_technical', 'some', 'technical'));
+ALTER TABLE analyses ADD COLUMN tech_reason TEXT NOT NULL DEFAULT '';
+CREATE INDEX idx_analyses_tech_level ON analyses (tech_level);
+CREATE TABLE portfolio_plans (
+    id          INTEGER PRIMARY KEY,
+    content     TEXT NOT NULL,
+    model       TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+);
+"""
+
 MIGRATIONS: tuple[str, ...] = (
     _SCHEMA_V1, _SCHEMA_V2, _SCHEMA_V3, _SCHEMA_V4, _SCHEMA_V5, _SCHEMA_V6, _SCHEMA_V7, _SCHEMA_V8,
-    _SCHEMA_V9,
+    _SCHEMA_V9, _SCHEMA_V10,
 )
 
 
