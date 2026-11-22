@@ -29,6 +29,7 @@ from app.models_registry import ModelRegistry, load_registry  # noqa: E402
 from app.ui import (  # noqa: E402
     import_page,
     opportunities,
+    painpoints_page,
     platforms_page,
     portfolio_page,
     problems_page,
@@ -91,6 +92,8 @@ def main() -> None:
                     icon="🔔", url_path="replies"),
             st.Page(lambda: problems_page.render(conn, settings, registry),
                     title="Top problems", icon="🧩", url_path="problems"),
+            st.Page(lambda: painpoints_page.render(conn, settings, registry),
+                    title="Pain points", icon="💡", url_path="painpoints"),
             st.Page(lambda: portfolio_page.render(conn, settings, registry),
                     title="Portfolio", icon="🏆", url_path="portfolio"),
             st.Page(lambda: import_page.render(conn, settings, registry),

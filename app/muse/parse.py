@@ -163,3 +163,46 @@ def _after_header(lines: list[str], fmt: BlockFormat, join_wrapped: bool = False
         else:
             break
     return [lines[header], *rows] if rows else []
+
+
+# ---------------------------------------------------- JSON answers (analysis)
+# For jobs where Muse thinks instead of browsing (app/painpoints.py): the answer is JSON between
+# ANALYSIS START and ANALYSIS END, or PROBLEM: <why>.
+
+ANALYSIS_START = _marker(r"ANALYSIS\s+START")
+ANALYSIS_END = _marker(r"ANALYSIS\s+END")
+_JSON_NOISE = re.compile(r"^\s*(copy|json|copied!?)\s*$", re.IGNORECASE)
+_SMART_QUOTES = str.maketrans({"“": '"', "”": '"', "‘": "'", "’": "'"})
+
+
+def analysis_is_complete(text: str) -> bool:
+    """True once the answer shows ANALYSIS END or a PROBLEM: line."""
+    return any(ANALYSIS_END.match(line) or line.strip().upper().startswith("PROBLEM:")
+               for line in clean_chat_text(text).splitlines())
+
+
+def parse_json_block(text: str) -> object:
+    """The JSON Muse wrote between ANALYSIS START and ANALYSIS END (a PROBLEM: line is reported)."""
+    import json
+
+    lines = clean_chat_text(text).splitlines()
+    start = next((i for i, ln in enumerate(lines) if ANALYSIS_START.match(ln)), None)
+    body_lines = lines[start + 1:] if start is not None else lines
+    end = next((i for i, ln in enumerate(body_lines) if ANALYSIS_END.match(ln)), len(body_lines))
+    body = "\n".join(ln for ln in body_lines[:end] if not _FENCE.match(ln) and not _JSON_NOISE.match(ln))
+    first, last = body.find("{"), body.rfind("}")
+    if first == -1 or last <= first:
+        problem = next((ln.strip() for ln in lines if ln.strip().upper().startswith("PROBLEM:")), None)
+        if problem:
+            raise MuseReplyError(f"Muse reported a problem: {problem[len('PROBLEM:'):].strip()}")
+        raise MuseReplyError("Muse's reply had no JSON answer between ANALYSIS START and ANALYSIS END. "
+                             "Open the chat and check it, or paste the answer by hand.")
+    raw = body[first:last + 1]
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        try:  # chat pages sometimes turn straight quotes into curly ones
+            return json.loads(raw.translate(_SMART_QUOTES))
+        except json.JSONDecodeError as exc:
+            raise MuseReplyError(f"Muse's JSON could not be read (line {exc.lineno}: {exc.msg}). "
+                                 "Ask Muse to answer again, or paste a corrected answer.") from None

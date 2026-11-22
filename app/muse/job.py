@@ -56,15 +56,64 @@ def clean_focus(focus: str) -> str:
     return focus
 
 
-def build_job_message(focus: str, max_posts: int) -> str:
+# Where a Muse job looks. "default" is the original social + Etsy search; the others are chosen by
+# the user on the Import / Pain points pages. LinkedIn forbids automated access, so its jobs are small
+# and read-only, and never copy people's names.
+PLACES = ("default", "reddit", "linkedin", "linkedin_trends")
+PLACE_LABELS = {
+    "default": "Facebook, Quora, Instagram and Etsy forums",
+    "reddit": "Reddit",
+    "linkedin": "LinkedIn: people asking for help",
+    "linkedin_trends": "LinkedIn: market problems and new things",
+}
+LINKEDIN_MAX_POSTS = 15
+_SEARCH_PLACES = {
+    "default": (
+        "Quora; public Facebook groups for small businesses, local businesses and Etsy/Shopify sellers; "
+        "Instagram; and the Etsy Community forums (community.etsy.com: Shop Critiques, Optimizing Your "
+        "Shop, Marketing)"
+    ),
+    "reddit": (
+        "Reddit (public posts only, newest first): r/smallbusiness, r/Etsy, r/EtsySellers, r/SEO, "
+        "r/localseo, r/Entrepreneur, r/excel, r/googlesheets, r/shopify, r/ecommerce, r/nocode, "
+        "r/Zapier, r/n8n. Source must be 'Reddit: r/<name>'"
+    ),
+    "linkedin": (
+        "LinkedIn public posts (use the search box, filter 'Posts', 'Past month'): phrases like "
+        "'looking for someone to automate', 'need help with SEO', 'Google Business Profile', 'Etsy shop help'. "
+        "Never open anyone's profile, connect, follow, message, react or comment. Leave the author column "
+        "EMPTY (do not copy people's names). Scroll slowly like a person. Source must be 'LinkedIn'"
+    ),
+    "linkedin_trends": (
+        "LinkedIn public posts (use the search box, filter 'Posts', 'Past month'): what small-business owners, "
+        "sellers, marketers and freelancers complain about or struggle with, and what NEW tools, AI features, "
+        "SEO or marketing changes they are talking about. Never open anyone's profile, connect, follow, "
+        "message, react or comment. Leave the author column EMPTY (do not copy people's names). Scroll "
+        "slowly like a person. Source must be 'LinkedIn: trend'"
+    ),
+}
+
+
+def build_job_message(focus: str, max_posts: int, place: str = "default") -> str:
     """The single line typed into the Muse side chat (the procedure is already there).
     It names the user's services (config/services.json) so Muse looks beyond automation."""
+    if place not in PLACES:
+        raise ConfigError(f"Unknown place {place!r}.")
+    if place.startswith("linkedin"):
+        max_posts = min(max_posts, LINKEDIN_MAX_POSTS)
+    if place == "linkedin_trends":
+        match = (
+            "A match is a public post from the last 30 days where a small-business owner, seller, marketer "
+            "or freelancer describes a PROBLEM they struggle with, or a NEW tool or change that is altering "
+            "how small businesses work. Put the problem or the new thing in title, and what they say in text"
+        )
+    else:
+        match = f"A match is a person asking for help with, or wanting to hire someone for, any of: {service_names()}"
+    where = "For this job look ONLY at" if place != "default" else "Use your browser (the Muse Chrome extension) to actually open and search"
     return (
-        f"{JOB_PREFIX} Focus: {focus or DEFAULT_FOCUS}. Maximum {max_posts} posts. "
-        f"A match is a person asking for help with, or wanting to hire someone for, any of: {service_names()}. "
-        "Use your browser (the Muse Chrome extension) to actually open and search: Quora; public Facebook "
-        "groups for small businesses, local businesses and Etsy/Shopify sellers; Instagram; and the Etsy "
-        "Community forums (community.etsy.com: Shop Critiques, Optimizing Your Shop, Marketing). "
+        f"{JOB_PREFIX} Focus: {focus or DEFAULT_FOCUS}. Maximum {max_posts} posts. {match}. "
+        f"{where}: {_SEARCH_PLACES[place]}. "
+        "Use your browser (the Muse Chrome extension) to actually open and search. "
         "If you cannot open them, reply PROBLEM: <what happened>. If nothing matches, "
         "reply NO POSTS FOUND: <where you looked and why>. Otherwise reply only in the exact "
         "POSTS START / POSTS END format from your procedure."
@@ -78,6 +127,7 @@ def run_muse_collection(
     *,
     ask: Callable[[str], MuseReplyText] | None = None,
     rate: Callable[[], int] | None = None,
+    place: str = "default",
 ) -> MuseRunResult:
     """Run one collection. `ask` / `rate` are injectable for tests.
 
@@ -86,10 +136,11 @@ def run_muse_collection(
     """
     muse = _require_enabled(settings)
     focus = clean_focus(focus)
-    message = build_job_message(focus, muse.max_posts)
+    message = build_job_message(focus, muse.max_posts, place)
+    label = focus if place == "default" else f"[{PLACE_LABELS[place]}] {focus}".strip()
 
     ask = ask or _asker(settings, POSTS)
-    return _run(conn, settings, focus, lambda: ask(message), _posts_handler(conn, settings, rate))
+    return _run(conn, settings, label, lambda: ask(message), _posts_handler(conn, settings, rate))
 
 
 def import_latest_reply(

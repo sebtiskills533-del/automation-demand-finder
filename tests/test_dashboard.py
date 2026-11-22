@@ -9,6 +9,7 @@ from streamlit.testing.v1 import AppTest
 from app import db, store
 from app.auth import LOCKOUT_THRESHOLD, hash_password
 from app.config import PROJECT_ROOT
+from app.errors import ConfigError
 from tests.conftest import make_analysis, make_post
 
 DASHBOARD = str(PROJECT_ROOT / "app" / "dashboard.py")
@@ -349,6 +350,71 @@ def _portfolio_page_app():
         portfolio_page.render(conn, settings, load_registry(settings.models_file))
 
 
+def _seed_rated(db_path, count):
+    with db.open_db(db_path) as conn:
+        for i in range(count):
+            store.save_post(conn, make_post(f"reddit_{i}", title=f"Automate thing {i}"))
+            store.save_analysis(conn, make_analysis(f"reddit_{i}"))
+
+
+def _painpoints_page_app():
+    from app import db
+    from app.config import load_settings
+    from app.models_registry import load_registry
+    from app.ui import painpoints_page
+
+    settings = load_settings()
+    with db.open_db(settings.db_path) as conn:
+        painpoints_page.render(conn, settings, load_registry(settings.models_file))
+
+
+def test_painpoints_page_claude_engine_shows_discussion_and_escapes(env, monkeypatch):
+    import json
+
+    from app.ui import painpoints_page
+    from tests.fakes import fake_message
+    from tests.test_painpoints import PLAN, point
+
+    _seed_rated(env, 6)
+    risky = PLAN | {"pain_points": [point(why_painful="Hours lost. Read [more](https://evil.example) now")]}
+    build, fake = _fake_llm_factory(fake_message(json.loads(json.dumps(risky))))
+    monkeypatch.setattr(painpoints_page, "build_llm", build)
+
+    at = AppTest.from_function(_painpoints_page_app, default_timeout=TIMEOUT).run()
+    assert not at.exception and "No analysis yet" in all_text(at) and fake.calls == []
+    at = _click(at, "💡 Find pain points with Claude")
+    assert not at.exception and len(fake.calls) == 1
+    text = all_text(at)
+    assert "Why it is a real pain point" in text and "Should we build it? The discussion" in text
+    assert "Why we should" in text and "The risks, and the answer to each" in text
+    assert "Subscription" in text and "AdSense" in text
+    assert "\\[more\\]" in text                   # Markdown escaped: no live link
+    assert "AI listing writers" in text                # market trend shown
+    with db.open_db(env) as conn:
+        saved = store.latest_pain_point_plan(conn)
+    assert saved["engine"] == "claude" and saved["content"]["pain_points"][0]["evidence"] == "Strong"
+
+
+def test_painpoints_page_muse_engine_prepare_and_paste(env):
+    import json
+
+    from tests.test_painpoints import PLAN
+
+    _seed_rated(env, 6)
+    at = AppTest.from_function(_painpoints_page_app, default_timeout=TIMEOUT).run()
+    at.segmented_control(key="pp_engine").set_value("🪄 Muse")
+    at = at.run()
+    assert not at.exception and any("Muse is switched off" in i.value for i in at.info)
+    at = _click(at, "Prepare the question")
+    assert any(c.value.startswith("ANALYZE PAIN POINTS.") and "\n" not in c.value for c in at.code)
+    at.text_area(key="pp_answer").input("ANALYSIS START\n" + json.dumps(PLAN) + "\nANALYSIS END")
+    at = _click(at, "Import this answer")
+    assert not at.exception and "Muse (pasted)" in all_text(at)
+    at.text_area(key="pp_answer").input("nonsense")
+    at = _click(at, "Import this answer")
+    assert any("no JSON answer" in e.value for e in at.error)
+
+
 def test_ai_errors_are_shown_not_crashed(env):
     seed(env)
     at = login()  # no ANTHROPIC_API_KEY in the test environment
@@ -495,13 +561,31 @@ def test_import_page_muse_start_runs_in_background(env, monkeypatch):
 
     monkeypatch.setenv("MUSE_ENABLED", "true")
     started = []
-    monkeypatch.setattr(import_page, "start_background_run", lambda focus: started.append(focus))
+    monkeypatch.setattr(import_page, "start_background_run", lambda focus, place: started.append((focus, place)))
     at = AppTest.from_function(_import_page_app, default_timeout=TIMEOUT).run()
     _by_label(at.text_input, "What should Muse look for").input("Etsy sellers")
     at = _click(at, "Start Muse collection")
     assert not at.exception
-    assert started == ["Etsy sellers"]
+    assert started == [("Etsy sellers", "default")]
     assert any("Started" in s.value for s in at.success)
+
+    at.selectbox(key="muse_place").set_value("linkedin")
+    at = at.run()
+    assert any("LinkedIn forbids automated access" in w.value for w in at.warning)
+    at = _click(at, "Start Muse collection")
+    assert started[-1] == ("Etsy sellers", "linkedin")
+
+
+def test_background_run_builds_the_command(monkeypatch):
+    from app.ui import import_page
+
+    calls = []
+    monkeypatch.setattr(import_page, "start_muse_process", lambda args: calls.append(args))
+    import_page.start_background_run("Etsy", "reddit")
+    import_page.start_background_run("", "default")
+    assert calls == [["run", "--focus", "Etsy", "--where", "reddit"], ["run"]]
+    with pytest.raises(ConfigError):
+        import_page.start_background_run("", "myspace")
 
 
 def test_import_page_shows_muse_runs_and_blocks_double_start(env, monkeypatch):

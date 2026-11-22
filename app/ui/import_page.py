@@ -12,13 +12,13 @@ from app import store
 from app.analyze import analyze_pending
 from app.cli import build_llm
 from app.config import Settings
-from app.errors import AppError
+from app.errors import AppError, ConfigError
 from app.importer import TEMPLATE_CSV, ImportReport, decode_upload, import_rows, import_text
 from app.models_registry import ModelRegistry
 from app.ui.components import page_header
 from app.domain import utc_now
 from app.muse.browser import STALE_LOCK_SECONDS, open_for_setup
-from app.muse.job import MAX_FOCUS_CHARS, clean_focus
+from app.muse.job import LINKEDIN_MAX_POSTS, MAX_FOCUS_CHARS, PLACE_LABELS, PLACES, clean_focus
 from app.ui.background import start_muse_process
 
 log = logging.getLogger(__name__)
@@ -157,13 +157,18 @@ def _muse_section(conn: sqlite3.Connection, settings: Settings) -> None:
         except AppError as exc:
             st.error(str(exc))
 
+    place = st.selectbox("Where should Muse look?", PLACES, format_func=PLACE_LABELS.get, key="muse_place")
+    if place.startswith("linkedin"):
+        st.warning("LinkedIn forbids automated access, so your LinkedIn account could be restricted. Use it "
+                   f"sparingly (a couple of times a week); the app keeps it to {LINKEDIN_MAX_POSTS} posts, "
+                   "read only, and never copies names.")
     focus = st.text_input("What should Muse look for? (optional)", max_chars=MAX_FOCUS_CHARS,
                           placeholder="e.g. Etsy sellers and Google Sheets")
     store.fail_stale_muse_runs(conn, utc_now() - timedelta(seconds=STALE_LOCK_SECONDS))
     running = any(r["status"] == "running" for r in store.recent_muse_runs(conn, 3))
     if c2.button("Start Muse collection", type="primary", disabled=running):
         try:
-            start_background_run(clean_focus(focus))
+            start_background_run(clean_focus(focus), place)
             st.success("Started. It can take up to 30 minutes. Click 'Refresh' below to see progress.")
         except (AppError, OSError) as exc:
             st.error(f"Could not start: {exc}")
@@ -201,9 +206,11 @@ def _muse_section(conn: sqlite3.Connection, settings: Settings) -> None:
         )
 
 
-def start_background_run(focus: str) -> None:
+def start_background_run(focus: str, place: str = "default") -> None:
     """Run `python -m app.muse run` as its own process so the dashboard stays responsive."""
-    start_muse_process(["run", "--focus", focus] if focus else ["run"])
+    if place not in PLACES:
+        raise ConfigError(f"Unknown place {place!r}.")
+    start_muse_process(["run", *(["--focus", focus] if focus else []), *(["--where", place] if place != "default" else [])])
 
 
 def start_background_import_last() -> None:

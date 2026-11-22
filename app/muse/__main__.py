@@ -3,9 +3,12 @@
     .venv\\Scripts\\python -m app.muse open-chrome          open the app's Chrome on muse.ai (log in / set up)
     .venv\\Scripts\\python -m app.muse run [--focus TEXT]   collect posts with Muse, import and rate them
     .venv\\Scripts\\python -m app.muse run --no-rate        ...without rating
+    .venv\\Scripts\\python -m app.muse run --where reddit   ...on Reddit (or linkedin, linkedin_trends)
     .venv\\Scripts\\python -m app.muse import-last          import Muse's reply to the last job (no new job)
     .venv\\Scripts\\python -m app.muse check-replies        ask Muse for replies people sent you
     .venv\\Scripts\\python -m app.muse import-last-replies  save Muse's last replies list (no new job)
+    .venv\\Scripts\\python -m app.muse pain-points          ask Muse to analyse your posts into pain points
+    .venv\\Scripts\\python -m app.muse import-last-painpoints  save Muse's last pain points answer
 """
 
 from __future__ import annotations
@@ -15,9 +18,12 @@ import sys
 
 from app.analyze import analyze_pending
 from app.cli import build_llm, open_runtime
+from app.errors import AppError
+from app.muse.analysis import import_latest_painpoints, run_muse_painpoints
 from app.muse.browser import open_for_setup
 from app.muse.job import (
     DEFAULT_REPLY_DAYS,
+    PLACES,
     import_latest_replies,
     import_latest_reply,
     run_muse_collection,
@@ -32,11 +38,14 @@ def main(argv: list[str] | None = None) -> int:
     run = commands.add_parser("run", help="collect posts with Muse")
     run.add_argument("--focus", default="", help="what to look for, e.g. 'Etsy sellers and spreadsheets'")
     run.add_argument("--no-rate", action="store_true", help="import only; rate later")
+    run.add_argument("--where", choices=PLACES, default="default", help="where Muse looks")
     last = commands.add_parser("import-last", help="import Muse's reply to the last job")
     last.add_argument("--no-rate", action="store_true", help="import only; rate later")
     check = commands.add_parser("check-replies", help="ask Muse for replies people sent you")
     check.add_argument("--days", type=int, default=DEFAULT_REPLY_DAYS, help="how many days back (1-60)")
     commands.add_parser("import-last-replies", help="save Muse's last replies list (no new job)")
+    commands.add_parser("pain-points", help="ask Muse to analyse your posts into pain points")
+    commands.add_parser("import-last-painpoints", help="save Muse's last pain points answer (no new job)")
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
     with open_runtime() as runtime:
@@ -44,6 +53,18 @@ def main(argv: list[str] | None = None) -> int:
             open_for_setup(runtime.settings.muse)
             print("The Muse Chrome is opening. Log in to muse.ai there (only needed once).")
             return 0
+        if args.command in ("pain-points", "import-last-painpoints"):
+            try:
+                if args.command == "pain-points":
+                    print("Asking Muse to analyse your posts. This can take a few minutes.")
+                    result = run_muse_painpoints(runtime.conn, runtime.settings)
+                else:
+                    result = import_latest_painpoints(runtime.conn, runtime.settings)
+            except AppError as exc:  # e.g. not enough posts yet
+                print(f"Failed: {exc}")
+                return 1
+            print(("Done: " if result.ok else "Failed: ") + result.message)
+            return 0 if result.ok else 1
         if args.command in ("check-replies", "import-last-replies"):
             if args.command == "check-replies":
                 print("Asking Muse for replies to you. This can take a few minutes.")
@@ -65,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
             result = import_latest_reply(runtime.conn, runtime.settings, rate=rate)
         else:
             print("Asking Muse. This can take up to 30 minutes; you can watch it in the Muse Chrome.")
-            result = run_muse_collection(runtime.conn, runtime.settings, args.focus, rate=rate)
+            result = run_muse_collection(runtime.conn, runtime.settings, args.focus, rate=rate, place=args.where)
     print(("Done: " if result.ok else "Failed: ") + result.message)
     if result.chat_url:
         print(f"Muse chat: {result.chat_url}")

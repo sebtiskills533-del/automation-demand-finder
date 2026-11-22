@@ -24,6 +24,7 @@ TASKS = {
     "email": "Email drafts",
     "explain": "Job explanations (Roman Urdu)",
     "portfolio": "Portfolio project picks",
+    "painpoints": "Pain points and market trends",
 }
 
 _SETTING_PREFIX = "model."

@@ -47,7 +47,21 @@ A **match** is a post where a real person describes a repetitive task or a broke
 2. **Facebook:** public posts in public groups for small business owners, Etsy / Shopify / Amazon sellers, freelancers and virtual assistants. Search the same phrases inside those groups.
 3. **Instagram:** public posts with hashtags such as `#smallbusinesstips` `#etsyseller` `#shopifyseller` `#googlesheets` `#automation` where the caption asks for help with a repetitive task.
 
+4. **Reddit** and **LinkedIn**, only when the job line says so (for example `For this job look ONLY at: Reddit ...`).
+   When the job line names the places, look ONLY there and follow its extra rules. On **LinkedIn**: never open
+   anyone's profile, connect, follow, message, react or comment; leave the `author` column empty (do not copy
+   names); scroll slowly like a person. For a LinkedIn **trends** job the match is a post about a problem small
+   businesses struggle with, or a new tool or change; put that problem in `title`.
+
 Prefer posts with **specific details** (tools, volumes, steps) and posts that say **hiring / will pay / DM me**.
+
+---
+
+## 5. Thinking jobs (no browsing)
+
+Sometimes the app types a job that starts with `ANALYZE PAIN POINTS.` It contains everything you need: the rules,
+the JSON shape and numbered requests. **Do not browse.** Reply only with a line `ANALYSIS START`, the JSON, then a
+line `ANALYSIS END` (or `PROBLEM: <what happened>`). No line break inside any text value.
 
 ---
 

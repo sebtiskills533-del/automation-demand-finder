@@ -415,22 +415,70 @@ def set_tech_levels(conn: sqlite3.Connection, levels: Iterable[tuple[str, str, s
 # -------------------------------------------------------------- portfolio
 
 
+_CANDIDATE_SELECT = """
+    SELECT p.id, p.title, p.url, p.platform, p.source, a.summary, a.service, a.category, a.tool,
+           a.est_hours, a.difficulty, a.product_potential, a.seriousness, a.tech_level,
+           c.name AS problem, (SELECT COUNT(*) FROM analyses x WHERE x.cluster_id = a.cluster_id) AS problem_posts
+    FROM analyses a JOIN posts p ON p.id = a.post_id
+    LEFT JOIN clusters c ON c.id = a.cluster_id
+"""
+
+
 def portfolio_candidates(conn: sqlite3.Connection, since: datetime, limit: int) -> list[dict]:
     """Recent real jobs to pick portfolio projects from: non-tech people first, then the
     problems many people share (product potential), then the most serious."""
     rows = conn.execute(
-        """SELECT p.id, p.title, p.url, p.platform, a.summary, a.service, a.category, a.tool,
-                  a.est_hours, a.difficulty, a.product_potential, a.seriousness, a.tech_level,
-                  c.name AS problem, (SELECT COUNT(*) FROM analyses x WHERE x.cluster_id = a.cluster_id) AS problem_posts
-           FROM analyses a JOIN posts p ON p.id = a.post_id
-           LEFT JOIN clusters c ON c.id = a.cluster_id
-           WHERE a.est_hours > 0 AND a.analyzed_at >= ?
+        _CANDIDATE_SELECT
+        + """WHERE a.est_hours > 0 AND a.analyzed_at >= ?
            ORDER BY (a.tech_level = 'non_technical') DESC, a.product_potential DESC,
                     a.seriousness DESC, a.opportunity_score DESC
            LIMIT ?""",
         (to_iso(since), limit),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def candidates_by_ids(conn: sqlite3.Connection, ids: list[str]) -> list[dict]:
+    """Rated posts for these ids, in the same order (posts that no longer exist are left out)."""
+    if not ids:
+        return []
+    rows = conn.execute(_CANDIDATE_SELECT + f"WHERE p.id IN ({', '.join('?' for _ in ids)})", ids).fetchall()
+    by_id = {r["id"]: dict(r) for r in rows}
+    return [by_id[i] for i in ids if i in by_id]
+
+
+def market_posts(conn: sqlite3.Connection, since: datetime, limit: int) -> list[dict]:
+    """Recent LinkedIn posts (any kind: problems people talk about, new things), newest first.
+    They are not always 'jobs', so they are kept apart from portfolio_candidates."""
+    rows = conn.execute(
+        _CANDIDATE_SELECT
+        + """WHERE p.platform = 'linkedin' AND a.analyzed_at >= ?
+           ORDER BY p.posted_at DESC LIMIT ?""",
+        (to_iso(since), limit),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def save_pain_point_plan(conn: sqlite3.Connection, content: dict, engine: str, model: str) -> int:
+    if engine not in ("claude", "muse", "pasted"):
+        raise ValueError(f"Unknown engine {engine!r}")
+    data = json.dumps(content, ensure_ascii=False)
+    if len(data) > 120_000:
+        raise ValueError("The analysis is too long")
+    with transaction(conn):
+        cursor = conn.execute(
+            "INSERT INTO pain_point_plans (content, engine, model, created_at) VALUES (?, ?, ?, ?)",
+            (data, engine, model, to_iso(utc_now())))
+    return int(cursor.lastrowid)
+
+
+def latest_pain_point_plan(conn: sqlite3.Connection) -> dict | None:
+    row = conn.execute("SELECT id, content, engine, model, created_at FROM pain_point_plans "
+                       "ORDER BY id DESC LIMIT 1").fetchone()
+    if row is None:
+        return None
+    return {"id": row["id"], "content": json.loads(row["content"]), "engine": row["engine"],
+            "model": row["model"], "created_at": row["created_at"]}
 
 
 def save_portfolio_plan(conn: sqlite3.Connection, content: dict, model: str) -> int:

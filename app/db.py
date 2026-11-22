@@ -224,9 +224,20 @@ CREATE TABLE portfolio_plans (
 );
 """
 
+# pain_point_plans: market pain points + trends (JSON), made by Claude, Muse, or pasted from Muse.
+_SCHEMA_V11 = """
+CREATE TABLE pain_point_plans (
+    id          INTEGER PRIMARY KEY,
+    content     TEXT NOT NULL,
+    engine      TEXT NOT NULL CHECK (engine IN ('claude', 'muse', 'pasted')),
+    model       TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+);
+"""
+
 MIGRATIONS: tuple[str, ...] = (
     _SCHEMA_V1, _SCHEMA_V2, _SCHEMA_V3, _SCHEMA_V4, _SCHEMA_V5, _SCHEMA_V6, _SCHEMA_V7, _SCHEMA_V8,
-    _SCHEMA_V9, _SCHEMA_V10,
+    _SCHEMA_V9, _SCHEMA_V10, _SCHEMA_V11,
 )
 
 

@@ -668,14 +668,16 @@ def test_cli_open_chrome_and_run(monkeypatch, settings, capsys):
 
     seen = {}
 
-    def fake_run(conn, settings_, focus, rate=None):
-        seen["focus"], seen["rate"] = focus, rate
+    def fake_run(conn, settings_, focus, rate=None, place="default"):
+        seen["focus"], seen["rate"], seen["place"] = focus, rate, place
         return MuseRunResult(1, True, "Import: 2 added.", added=2, chat_url="https://muse.ai/c")
 
     monkeypatch.setattr(muse_cli, "run_muse_collection", fake_run)
     assert muse_cli.main(["run", "--focus", "Etsy"]) == 0
     assert seen["focus"] == "Etsy" and seen["rate"] is not None  # API key present -> rates
     assert muse_cli.main(["run", "--no-rate"]) == 0 and seen["rate"] is None
+    assert seen["place"] == "default"
+    assert muse_cli.main(["run", "--where", "reddit"]) == 0 and seen["place"] == "reddit"
 
     def fake_import(conn, settings_, rate=None):
         seen["import_rate"] = rate

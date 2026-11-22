@@ -43,7 +43,8 @@ app/
   services.py         the user's services (config/services.json): automation, etsy, seo, local_seo
   importer.py         import user-supplied posts (CSV/JSON/form); skips the keyword filter
   muse/               optional Muse collection: browser.py (Chrome/CDP/lock), client.py
-                      (chat driving), parse.py (reply format), job.py (run), selectors.py
+                      (chat driving), parse.py (reply formats + JSON answers), job.py (run; PLACES: default,
+                      reddit, linkedin, linkedin_trends), analysis.py (Muse as a thinking engine), selectors.py
   collect.py          step 1: collect posts
   prefilter.py        step 2: keyword filter
   models_registry.py  Claude models, levels, prices, per-task choice
@@ -60,6 +61,8 @@ app/
   specs.py            v1.2 product specs per problem group
   inbox.py            replies people sent the user (linking, email-if-shared rule)
   techlevel.py        judge who is non-tech for posts rated before analyses.tech_level existed (on click)
+  painpoints.py       💡 pain points + discussion + AdSense/subscription; Claude OR Muse engine, same validator
+                      (numbers in, numbers out; app rules: evidence strength by count, no 'Build it' if thin/60+ h)
   portfolio.py        🏆 portfolio picks from real posts (numbers in, numbers out; <= 30 h each)
   explain.py          'Samjhao' tab: Roman Urdu job explanation, only on click (explanations table)
   emails.py           email drafts for replies with a shared email (mailto, never sends)
@@ -67,7 +70,7 @@ app/
   set_password.py     CLI to set the dashboard password
   dashboard.py        Streamlit entry point
   ui/                 dashboard pages (opportunities, replies_page, problems_page,
-                      import_page, platforms_page, portfolio_page, settings_page), reply_widgets.py, background.py, components.py (badges, md_escape), assets/
+                      import_page, painpoints_page, platforms_page, portfolio_page, settings_page), reply_widgets.py, background.py, components.py (badges, md_escape), assets/
                       Theme: .streamlit/config.toml (teal + amber).
 config/               sources.json, phrases.txt, models.json, services.json, platforms.json (user-editable)
 run_daily.py          the daily run
