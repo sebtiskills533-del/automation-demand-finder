@@ -683,6 +683,26 @@ def test_start_background_run_uses_argument_list(monkeypatch):
     assert "shell" not in options
 
 
+def test_settings_page_on_off_switch(env):
+    from app.schedule import get_schedule
+
+    at = AppTest.from_function(_settings_page_app, default_timeout=TIMEOUT).run()
+    assert not at.exception and any("It will run at 07:00, 10:00" in s.value for s in at.success)
+    next(t for t in at.toggle if t.label == "Run automatically").set_value(False)
+    at = at.run()
+    assert not at.exception and any("Automatic runs are off" in i.value for i in at.info)
+    with db.open_db(env) as conn:
+        assert not get_schedule(conn).enabled
+    next(t for t in at.toggle if t.label == "Run automatically").set_value(True)
+    at = at.run()
+    next(s for s in at.slider if s.label == "Only between these hours").set_value((9, 18))
+    at = at.run()
+    with db.open_db(env) as conn:
+        schedule = get_schedule(conn)
+    assert (schedule.enabled, schedule.start_hour, schedule.end_hour) == (True, 9, 18)
+    assert any("10:00, 13:00, 16:00" in s.value for s in at.success)
+
+
 def test_settings_page_lists_all_models_and_saves_choice(env):
     # AppTest can't switch to function-based pages, so render the page directly.
     with db.open_db(env) as conn:

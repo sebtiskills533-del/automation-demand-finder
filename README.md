@@ -94,6 +94,10 @@ folder** and run once:
 powershell -ExecutionPolicy Bypass -File scripts\schedule_every_3_hours.ps1
 ```
 
+**On/off switch:** on **⚙️ Settings & costs → ⏰ Automatic runs**, switch it off, or
+choose the hours it may run (default 7:00–23:00, so never at night). A skipped run
+collects nothing and costs nothing; the desktop *daily job* icon always works.
+
 To check it: open **Task Scheduler** → *Task Scheduler Library* → *Automation
 Demand Finder* → right-click → **Run**. To remove it:
 `Unregister-ScheduledTask -TaskName "Automation Demand Finder"`.

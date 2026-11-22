@@ -13,6 +13,7 @@ from app.config import Settings
 from app.domain import utc_now
 from app.errors import ConfigError
 from app.models_registry import TASKS, ModelRegistry
+from app.schedule import get_schedule, run_times, set_schedule
 from app.ui.components import page_header, writing_style_picker
 
 TASK_HELP = {
@@ -26,6 +27,8 @@ TASK_HELP = {
 
 def render(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry) -> None:
     page_header("⚙️ Settings & costs", "See what the AI costs and choose which Claude model does each job.")
+    _automatic_runs(conn)
+    st.write("")
     _spending(conn, settings)
     st.write("")
     _model_choice(conn, registry)
@@ -37,6 +40,34 @@ def render(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry
         writing_style_picker(conn, "settings")
     st.write("")
     _model_table(registry)
+
+
+def _automatic_runs(conn: sqlite3.Connection) -> None:
+    schedule = get_schedule(conn)
+    with st.container(border=True):
+        st.markdown("#### ⏰ Automatic runs")
+        st.caption("Windows starts the job every 3 hours. Switch it off, or choose the hours it may run; "
+                   "a skipped run collects nothing and costs nothing. The desktop 'daily job' icon always works.")
+        c1, c2 = st.columns([1, 2])
+        enabled = c1.toggle("Run automatically", value=schedule.enabled, key=f"sched_on_{schedule.enabled}")
+        start, end = c2.slider("Only between these hours", 0, 24, (schedule.start_hour, schedule.end_hour),
+                               format="%d:00", disabled=not enabled,
+                               key=f"sched_hours_{schedule.start_hour}_{schedule.end_hour}")
+        if (enabled, start, end) != (schedule.enabled, schedule.start_hour, schedule.end_hour):
+            try:
+                schedule = set_schedule(conn, enabled, start, end)
+                st.toast(f"Automatic runs: {schedule.label()}", icon="⏰")
+                st.rerun()
+            except ValueError as exc:
+                st.error(str(exc))
+        times = run_times(schedule)
+        if not schedule.enabled:
+            st.info("⏸️ Automatic runs are off. Nothing runs until you switch them on again.")
+        elif times:
+            st.success(f"▶️ {schedule.label()}. It will run at {', '.join(times)}.")
+        else:
+            st.warning("No 3-hourly run (7:00, 10:00, 13:00...) falls inside these hours, so nothing will run. "
+                       "Widen the hours.")
 
 
 def _spending(conn: sqlite3.Connection, settings: Settings) -> None:

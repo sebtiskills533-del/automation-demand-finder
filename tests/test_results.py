@@ -146,7 +146,7 @@ def test_run_daily_script_shows_a_notification(monkeypatch, settings):
     monkeypatch.setattr(script, "run_daily", lambda runtime: _report([{"title": "Boost reviews", "bids": 3}]))
     monkeypatch.setattr(script, "send_toast", lambda title, body: shown.append((title, body)))
     monkeypatch.setattr(cli, "build_llm", lambda s, c: object())
-    script.main()
+    script.main([])
     assert shown and "1 fresh gig" in shown[0][0] and "Boost reviews (3 bids)" in shown[0][1]
 
 
@@ -195,7 +195,7 @@ def test_fresh_gig_message():
 
 def test_schedule_script_runs_every_3_hours_without_a_window():
     script = (PROJECT_ROOT / "scripts" / "schedule_every_3_hours.ps1").read_text(encoding="utf-8")
-    assert "pythonw.exe" in script and "New-TimeSpan -Hours 3" in script and "run_daily.py" in script
+    assert "pythonw.exe" in script and "New-TimeSpan -Hours 3" in script and "run_daily.py --scheduled" in script
     assert "IgnoreNew" in script
 
 

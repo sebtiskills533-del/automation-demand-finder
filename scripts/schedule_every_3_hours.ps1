@@ -1,5 +1,6 @@
 # Runs the daily job every 3 hours (from 7 am), in the background, without a window.
 # Fresh gigs with few bids then pop up as a Windows notification.
+# Switch it on/off, and choose its hours, on the dashboard's Settings page (no need to run this again).
 #
 # Run once from the project folder:
 #     powershell -ExecutionPolicy Bypass -File scripts\schedule_every_3_hours.ps1
@@ -14,7 +15,7 @@ if (-not (Test-Path $pythonw)) {
     exit 1
 }
 
-$action = New-ScheduledTaskAction -Execute $pythonw -Argument "run_daily.py" -WorkingDirectory $dir
+$action = New-ScheduledTaskAction -Execute $pythonw -Argument "run_daily.py --scheduled" -WorkingDirectory $dir
 $start = (Get-Date).Date.AddHours(7)
 $trigger = New-ScheduledTaskTrigger -Once -At $start -RepetitionInterval (New-TimeSpan -Hours 3) -RepetitionDuration (New-TimeSpan -Days 3650)
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `

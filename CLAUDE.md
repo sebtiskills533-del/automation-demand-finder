@@ -61,6 +61,7 @@ app/
   clusters.py         v1.1 top problems (numbered lines in, numbers out)
   specs.py            v1.2 product specs per problem group
   inbox.py            replies people sent the user (linking, email-if-shared rule)
+  schedule.py         on/off switch + hours for scheduled runs (run_daily.py --scheduled obeys it)
   results.py          📊 Results logic (reply rate by platform/service/style/speed/bids); pure functions
   notify.py           Windows toast for fresh low-bid gigs (text via env vars, never in the command)
   techlevel.py        judge who is non-tech for posts rated before analyses.tech_level existed (on click)
