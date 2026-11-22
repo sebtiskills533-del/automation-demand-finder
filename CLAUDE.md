@@ -53,13 +53,16 @@ app/
   scoring.py          opportunity score + label
   timeline.py         delivery-time rules
   contact.py          allowed contact method rules
-  pipeline.py         collect -> filter -> analyze -> group (clusters)
+  pipeline.py         collect -> filter -> analyze -> group (clusters, at most once a day) -> fresh gigs;
+                      scheduled every 3 h by scripts/schedule_every_3_hours.ps1 (pythonw, no window)
   budget.py           monthly AI budget check shared by every Claude feature
   replies.py          v1.1 draft replies (saved to actions.reply_draft)
   reports.py          v1.1 Decision Reports (ticked posts only; app rules win)
   clusters.py         v1.1 top problems (numbered lines in, numbers out)
   specs.py            v1.2 product specs per problem group
   inbox.py            replies people sent the user (linking, email-if-shared rule)
+  results.py          📊 Results logic (reply rate by platform/service/style/speed/bids); pure functions
+  notify.py           Windows toast for fresh low-bid gigs (text via env vars, never in the command)
   techlevel.py        judge who is non-tech for posts rated before analyses.tech_level existed (on click)
   painpoints.py       💡 pain points + discussion + AdSense/subscription; Claude OR Muse engine, same validator
                       (numbers in, numbers out; app rules: evidence strength by count, no 'Build it' if thin/60+ h)
@@ -70,7 +73,7 @@ app/
   set_password.py     CLI to set the dashboard password
   dashboard.py        Streamlit entry point
   ui/                 dashboard pages (opportunities, replies_page, problems_page,
-                      import_page, painpoints_page, platforms_page, portfolio_page, settings_page), reply_widgets.py, background.py, components.py (badges, md_escape), assets/
+                      import_page, painpoints_page, platforms_page, portfolio_page, results_page, settings_page), reply_widgets.py, background.py, components.py (badges, md_escape), assets/
                       Theme: .streamlit/config.toml (teal + amber).
 config/               sources.json, phrases.txt, models.json, services.json, platforms.json (user-editable)
 run_daily.py          the daily run

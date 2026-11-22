@@ -16,18 +16,25 @@ from app.timeline import delivery_label
 CONVINCING = "convincing"
 TIP_FIRST = "tip_first"
 QUICK_TIP = "quick_tip"
+PROPOSAL = "proposal"
 DEFAULT_STYLE = CONVINCING
 STYLE_LABELS = {
     QUICK_TIP: "🛠️ Quick tip (detailed how-to)",
     TIP_FIRST: "💡 Short tip first",
     CONVINCING: "✨ Clear & convincing",
+    PROPOSAL: "📝 Proposal (for gigs)",
 }
 STYLE_HELP = {
     QUICK_TIP: "The first style: 'Quick tip:' with exact steps, tools and numbers, then "
                "'I build small automations like this' and an offer to share how you'd set it up.",
     TIP_FIRST: "Straight to a useful tip, then one short line offering help.",
     CONVINCING: "Restates their problem, explains it simply, gives a tip, the benefit and a clear next step.",
+    PROPOSAL: "For Freelancer.com bids and job applications: their goal first, a 3-step plan, the delivery "
+              "time, a spot for your portfolio link and one question.",
 }
+# Public replies and emails use these; gigs and job listings use JOB_STYLES.
+REPLY_STYLES = (QUICK_TIP, TIP_FIRST, CONVINCING)
+JOB_STYLES = (PROPOSAL, CONVINCING)
 _SETTING_KEY = "writing.style"
 
 CLEAR_AND_CONVINCING = """How to write it (the reader is usually a busy, non-technical business owner):
@@ -70,8 +77,31 @@ tools, settings and numbers that fit their case.
 them through how you'd do it for their case."""
 
 
+_PROPOSAL = """How to write it (a bid on Freelancer.com or a short application; the client reads only the \
+first two lines in a list of 50-300 bids, so those lines decide everything):
+1. First sentence: their goal in their own words and that you can deliver it (e.g. "You want every \
+new Squarespace signup added to Brevo automatically, and I can set that up for you"). Never start with \
+"Hi, I am..." or "I have read your project".
+2. A short plan in 3 numbered steps written as plain sentences on separate lines (1. ... 2. ... 3. ...), \
+specific to their tools; this replaces the tip.
+3. The delivery time you are given, and that you will test it with them before handover.
+4. One line of proof with a placeholder the freelancer fills in: "Similar work: [link to my project]".
+5. End with ONE specific question about their setup that shows you understood (e.g. "Are your \
+signups coming from a form block or from checkout?").
+No price (it goes in the bid amount), no buzzwords, no fake experience or reviews."""
+
+
+def styles_for(platform: str) -> tuple[str, ...]:
+    """Which styles to offer for a post: proposals for gigs and job listings, replies elsewhere."""
+    from app.domain import JOB_BOARD_PLATFORMS
+
+    return JOB_STYLES if platform in JOB_BOARD_PLATFORMS else REPLY_STYLES
+
+
 def style_rules(style: str, kind: Literal["reply", "email"]) -> str:
     """The writing rules to put in a prompt for this style and kind of draft."""
+    if style == PROPOSAL and kind == "reply":
+        return _PROPOSAL
     if style == TIP_FIRST:
         return _TIP_FIRST_EMAIL if kind == "email" else _TIP_FIRST_REPLY
     if style == QUICK_TIP:
@@ -82,6 +112,9 @@ def style_rules(style: str, kind: Literal["reply", "email"]) -> str:
 def reply_format_rules(style: str, max_words: int) -> str:
     """Length / closing rules for replies. The quick-tip style keeps its own one-paragraph
     shape and its 'DM me' offer, exactly as the first drafts were written."""
+    if style == PROPOSAL:
+        return (f"- 90-{max_words} words (never more), plain text, no headings or markdown; the 3 plan steps on "
+                "their own lines.\n- The placeholder in square brackets is the only allowed 'link'.")
     if style == QUICK_TIP:
         return ("- One paragraph, plain text, no more than 130 words. No headings, no markdown, no lists.\n"
                 "- Invite them to DM you only if the contact method is a direct message; otherwise make "
@@ -93,13 +126,16 @@ def reply_format_rules(style: str, max_words: int) -> str:
             "do you use now?\").")
 
 
-def get_style(conn: sqlite3.Connection) -> str:
+def get_style(conn: sqlite3.Connection, platform: str | None = None) -> str:
+    """The preferred style; for gigs and job listings always the proposal."""
+    if platform is not None and styles_for(platform) == JOB_STYLES:
+        return PROPOSAL
     saved = store.get_setting(conn, _SETTING_KEY)
-    return saved if saved in STYLE_LABELS else DEFAULT_STYLE
+    return saved if saved in REPLY_STYLES else DEFAULT_STYLE
 
 
 def set_style(conn: sqlite3.Connection, style: str) -> None:
-    if style not in STYLE_LABELS:
+    if style not in REPLY_STYLES:
         raise ValueError(f"Unknown writing style {style!r}")
     store.set_setting(conn, _SETTING_KEY, style)
 

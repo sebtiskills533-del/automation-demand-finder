@@ -88,6 +88,7 @@ class Post:
     body: str
     author_handle: str
     posted_at: datetime
+    bids: int | None = None  # Freelancer.com gigs: bids so far when collected
 
     def __post_init__(self) -> None:
         if self.platform not in PLATFORM_NAMES:
@@ -130,6 +131,11 @@ class AnalysisRecord:
 # don't know the tools exist) are the freelancer's best potential customers.
 TECH_LEVELS = ("non_technical", "some", "technical")
 TECH_LABELS = {"non_technical": "🙋 Non-tech", "some": "🙂 Some tech", "technical": "🧑‍💻 Techie"}
+
+
+# What happened after the user answered a post (NULL in the database = still waiting).
+OUTCOMES = ("replied", "won", "lost")
+OUTCOME_LABELS = {None: "⏳ Waiting", "replied": "💬 They replied", "won": "🏆 Won", "lost": "❌ Lost"}
 
 
 def utc_now() -> datetime:

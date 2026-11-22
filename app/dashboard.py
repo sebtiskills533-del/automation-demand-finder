@@ -34,6 +34,7 @@ from app.ui import (  # noqa: E402
     portfolio_page,
     problems_page,
     replies_page,
+    results_page,
     settings_page,
 )
 from app.ui.components import apply_page_style  # noqa: E402
@@ -90,6 +91,7 @@ def main() -> None:
             st.Page(lambda: replies_page.render(conn, settings, registry),
                     title=f"Replies ({new_replies} new)" if new_replies else "Replies",
                     icon="🔔", url_path="replies"),
+            st.Page(lambda: results_page.render(conn), title="Results", icon="📊", url_path="results"),
             st.Page(lambda: problems_page.render(conn, settings, registry),
                     title="Top problems", icon="🧩", url_path="problems"),
             st.Page(lambda: painpoints_page.render(conn, settings, registry),

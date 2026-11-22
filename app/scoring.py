@@ -20,12 +20,28 @@ WORTH_A_LOOK = "Worth a look"
 SKIP = "Skip"
 
 
+def bid_adjustment(bids: int | None) -> int:
+    """Freelancer.com gigs: few bids = a real chance to be noticed; 80+ bids = very hard to win.
+    (Kept in step with the one-off update in db._SCHEMA_V12.)"""
+    if bids is None:
+        return 0
+    if bids <= 10:
+        return 5
+    if bids <= 30:
+        return 0
+    if bids <= 80:
+        return -10
+    return -20
+
+
 def opportunity_score(
-    seriousness: int, product_potential: int, difficulty: str, buildable: bool, wants_to_hire: bool
+    seriousness: int, product_potential: int, difficulty: str, buildable: bool, wants_to_hire: bool,
+    bids: int | None = None,
 ) -> int:
     """0-100. Each 1-5 rating is weighted; easy jobs score higher.
 
     - Someone openly offering to pay gets a bonus.
+    - Gigs with few bids go up, crowded ones down (bid_adjustment).
     - Jobs we can't build are capped low, however attractive.
     """
     for name, value in (("seriousness", seriousness), ("product_potential", product_potential)):
@@ -40,6 +56,7 @@ def opportunity_score(
     score = round((weighted - 1) / 4 * 100)  # map 1..5 onto 0..100
     if wants_to_hire:
         score += HIRE_BONUS
+    score += bid_adjustment(bids)
     if not buildable:
         score = min(score, NOT_BUILDABLE_CAP)
     return max(0, min(100, score))

@@ -15,7 +15,7 @@ from app.llm import ClaudeClient
 from app.models_registry import ModelRegistry
 from app.privacy import strip_contact_details
 from app.services import offer_summary
-from app.writing import DEFAULT_STYLE, delivery_hint, get_style, reply_format_rules, style_rules
+from app.writing import DEFAULT_STYLE, STYLE_LABELS, delivery_hint, get_style, reply_format_rules, style_rules
 
 TASK = "reply"
 MAX_WORDS = 120
@@ -66,7 +66,9 @@ def draft_reply(
     if post is None:
         raise ValueError(f"No analysed post with id {post_id!r}")
     check_budget(conn, settings)
-    style = style or get_style(conn)
+    style = style or get_style(conn, post["platform"])
+    if style not in STYLE_LABELS:
+        raise ValueError(f"Unknown writing style {style!r}")
 
     user_text = (
         build_user_text(post["platform"], post["source"], post["title"], post["body"])
@@ -83,5 +85,5 @@ def draft_reply(
     )
     reply = strip_contact_details(result.data.reply)  # belt and braces
     store.save_draft(conn, "reply", post_id, style, reply)      # kept per style, to compare
-    store.update_action(conn, post_id, reply_draft=reply)       # the newest becomes the chosen one
+    store.update_action(conn, post_id, reply_draft=reply, reply_style=style)  # the newest becomes the chosen one
     return reply

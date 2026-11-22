@@ -19,7 +19,9 @@ from app.domain import (
     MAX_BODY_CHARS,
     MAX_NOTES_CHARS,
     MAX_REPLY_CHARS,
+    JOB_BOARD_PLATFORMS,
     MAX_TITLE_CHARS,
+    OUTCOMES,
     PATHS,
     PLATFORM_NAMES,
     REPORT_VERDICTS,
@@ -39,8 +41,8 @@ def save_post(conn: sqlite3.Connection, post: Post) -> bool:
     with transaction(conn):
         cursor = conn.execute(
             """INSERT OR IGNORE INTO posts
-               (id, source, platform, url, title, body, author_handle, posted_at, collected_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (id, source, platform, url, title, body, author_handle, posted_at, collected_at, bids)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 post.id,
                 post.source,
@@ -51,6 +53,7 @@ def save_post(conn: sqlite3.Connection, post: Post) -> bool:
                 post.author_handle,
                 to_iso(post.posted_at),
                 to_iso(utc_now()),
+                post.bids,
             ),
         )
     return cursor.rowcount == 1
@@ -77,7 +80,7 @@ def posts_pending_analysis(
 ) -> list[sqlite3.Row]:
     """Newest posts that passed the filter, have no analysis, and haven't failed too often."""
     return conn.execute(
-        """SELECT p.id, p.source, p.platform, p.title, p.body
+        """SELECT p.id, p.source, p.platform, p.title, p.body, p.bids
            FROM posts p
            LEFT JOIN analyses a ON a.post_id = p.id
            WHERE p.passed_filter = 1 AND a.post_id IS NULL AND p.analysis_attempts < ?
@@ -171,7 +174,7 @@ def delete_analyses(conn: sqlite3.Connection, post_ids: Iterable[str]) -> int:
 
 # -------------------------------------------------------------- actions
 
-_ACTION_FIELDS = ("status", "path", "notes", "reply_draft", "answered_at")
+_ACTION_FIELDS = ("status", "path", "notes", "reply_draft", "answered_at", "reply_style")
 
 
 def update_action(conn: sqlite3.Connection, post_id: str, **changes: str | None) -> None:
@@ -226,13 +229,63 @@ def set_answered(conn: sqlite3.Connection, post_id: str, answered: bool) -> None
 
 
 def mark_answered_if_unset(conn: sqlite3.Connection, post_id: str, when: str) -> None:
-    """A reply came in for this post, so the user must have answered it. Never unticks."""
+    """A reply came in for this post, so the user must have answered it, and the person replied.
+    Never unticks, and never overwrites an outcome the user set (won / lost)."""
     with transaction(conn):
         conn.execute(
-            """INSERT INTO actions (post_id, answered_at, updated_at) VALUES (?, ?, ?)
-               ON CONFLICT (post_id) DO UPDATE SET answered_at = COALESCE(actions.answered_at, excluded.answered_at)""",
-            (post_id, when, to_iso(utc_now())),
+            """INSERT INTO actions (post_id, answered_at, outcome, outcome_at, updated_at) VALUES (?, ?, 'replied', ?, ?)
+               ON CONFLICT (post_id) DO UPDATE SET
+                   answered_at = COALESCE(actions.answered_at, excluded.answered_at),
+                   outcome_at = CASE WHEN actions.outcome IS NULL THEN excluded.outcome_at ELSE actions.outcome_at END,
+                   outcome = COALESCE(actions.outcome, 'replied')""",
+            (post_id, when, when, to_iso(utc_now())),
         )
+
+
+def set_outcome(conn: sqlite3.Connection, post_id: str, outcome: str | None) -> None:
+    """What happened after the user answered: 'replied', 'won', 'lost', or None (still waiting).
+    Setting an outcome also ticks the post as answered."""
+    if outcome not in (*OUTCOMES, None):
+        raise ValueError(f"Outcome must be one of {', '.join(OUTCOMES)} or empty")
+    now = to_iso(utc_now())
+    with transaction(conn):
+        try:
+            conn.execute(
+                """INSERT INTO actions (post_id, outcome, outcome_at, answered_at, updated_at) VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT (post_id) DO UPDATE SET outcome = excluded.outcome, outcome_at = excluded.outcome_at,
+                       answered_at = COALESCE(actions.answered_at, excluded.answered_at),
+                       updated_at = excluded.updated_at""",
+                (post_id, outcome, now if outcome else None, now if outcome else None, now),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise ValueError(f"No post with id {post_id!r}") from exc
+
+
+def results_rows(conn: sqlite3.Connection) -> list[dict]:
+    """Every post the user answered, with what is needed to see what works (Results page)."""
+    rows = conn.execute(
+        """SELECT p.id, p.platform, p.source, p.posted_at, p.bids, a.service, a.tech_level,
+                  a.opportunity_score, ac.answered_at, ac.outcome, ac.reply_style,
+                  (SELECT COUNT(*) FROM replies r WHERE r.post_id = p.id) AS replies
+           FROM actions ac JOIN posts p ON p.id = ac.post_id
+           LEFT JOIN analyses a ON a.post_id = p.id
+           WHERE ac.answered_at IS NOT NULL
+           ORDER BY ac.answered_at DESC"""
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def fresh_gigs(conn: sqlite3.Connection, rated_since: datetime, min_score: int, max_bids: int) -> list[dict]:
+    """Good job-board posts rated since `rated_since` that few people have bid on yet (for the alert)."""
+    rows = conn.execute(
+        f"""SELECT p.id, p.title, p.platform, p.bids, a.opportunity_score FROM analyses a
+            JOIN posts p ON p.id = a.post_id LEFT JOIN actions ac ON ac.post_id = p.id
+            WHERE a.analyzed_at >= ? AND a.opportunity_score >= ? AND (p.bids IS NULL OR p.bids <= ?)
+              AND p.platform IN ({', '.join('?' for _ in JOB_BOARD_PLATFORMS)}) AND ac.answered_at IS NULL
+            ORDER BY a.opportunity_score DESC""",
+        (to_iso(rated_since), min_score, max_bids, *JOB_BOARD_PLATFORMS),
+    ).fetchall()
+    return [dict(r) for r in rows]
 
 
 # ------------------------------------------------------------ dashboard
@@ -253,6 +306,8 @@ class DashboardFilters:
     search: str = ""
     answered: bool | None = None  # True = only answered, False = only not answered
     tech_levels: tuple[str, ...] = ()
+    max_bids: int | None = None      # gigs with at most this many bids (posts without bids still show)
+    posted_since: datetime | None = None
 
 
 _DASHBOARD_SELECT = """
@@ -263,7 +318,7 @@ _DASHBOARD_SELECT = """
            a.contact_method, a.opportunity_score, a.model, a.service,
            COALESCE(ac.status, ?) AS status, ac.path, COALESCE(ac.notes, '') AS notes,
            COALESCE(ac.reply_draft, '') AS reply_draft, a.cluster_id, ac.answered_at,
-           a.tech_level, a.tech_reason
+           a.tech_level, a.tech_reason, p.bids, ac.outcome, ac.outcome_at, ac.reply_style
     FROM posts p
     JOIN analyses a ON a.post_id = p.id
     LEFT JOIN actions ac ON ac.post_id = p.id
@@ -290,6 +345,12 @@ def _dashboard_where(filters: DashboardFilters) -> tuple[str, list[object]]:
     in_list("a.tech_level", filters.tech_levels, TECH_LEVELS)
     if filters.buildable_only:
         clauses.append("a.buildable = 1")
+    if filters.max_bids is not None:
+        clauses.append("(p.bids IS NULL OR p.bids <= ?)")
+        params.append(int(filters.max_bids))
+    if filters.posted_since is not None:
+        clauses.append("p.posted_at >= ?")
+        params.append(to_iso(filters.posted_since))
     if filters.answered is not None:
         clauses.append("ac.answered_at IS NOT NULL" if filters.answered else "ac.answered_at IS NULL")
     search = filters.search.strip()[:100]

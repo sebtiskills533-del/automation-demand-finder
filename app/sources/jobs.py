@@ -88,7 +88,7 @@ def money_range(low: object, high: object, currency: str = "") -> str:
 
 
 def _post(platform: str, source: str, key: str, url: str, title: str, facts: str, body_html: str,
-          when: object, author: str = "") -> Post:
+          when: object, author: str = "", bids: int | None = None) -> Post:
     return Post(
         id=f"{platform}_{key}",
         source=source,
@@ -98,7 +98,16 @@ def _post(platform: str, source: str, key: str, url: str, title: str, facts: str
         body=clean_text(f"{facts}\n\n{html_to_text(body_html or '')}"),
         author_handle=clean_text(author)[:50],
         posted_at=_when(when),
+        bids=bids,
     )
+
+
+def _bid_count(value: object) -> int | None:
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        return None
+    return count if 0 <= count < 100_000 else None
 
 
 class _JsonJobSource:
@@ -142,10 +151,11 @@ class FreelancerSource(_JsonJobSource):
         budget = item.get("budget") or {}
         currency = (item.get("currency") or {}).get("code", "")
         amount = money_range(budget.get("minimum"), budget.get("maximum"), currency)
-        facts = _facts(budget=amount, type=item.get("type"), bids=(item.get("bid_stats") or {}).get("bid_count"))
+        bids = _bid_count((item.get("bid_stats") or {}).get("bid_count"))
+        facts = _facts(budget=amount, type=item.get("type"), bids=bids)
         return _post("freelancer", "Freelancer.com", str(item["id"]), f"https://www.freelancer.com/projects/{seo_url}",
                      item.get("title", ""), facts, item.get("description") or item.get("preview_description", ""),
-                     item.get("time_submitted") or item.get("submitdate"))
+                     item.get("time_submitted") or item.get("submitdate"), bids=bids)
 
 
 class RemoteOkSource(_JsonJobSource):

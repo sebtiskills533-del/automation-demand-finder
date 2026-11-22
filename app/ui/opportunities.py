@@ -24,6 +24,7 @@ from app.domain import (
     MAX_NOTES_CHARS,
     MAX_REPLY_CHARS,
     PATHS,
+    OUTCOME_LABELS,
     PLATFORM_NAMES,
     STATUSES,
     TECH_LABELS,
@@ -51,6 +52,7 @@ from app.ui.components import (
 from app.ui.draft_compare import compare_drafts
 from app.ui.reply_widgets import reply_card
 from app.ui.table import build_table, stars
+from app.writing import get_style, styles_for
 
 log = logging.getLogger(__name__)
 
@@ -63,10 +65,16 @@ class View(NamedTuple):
     platforms: tuple[str, ...] = ()
     answered: bool | None = None  # None = answered or not
     tech_levels: tuple[str, ...] = ()
+    max_bids: int | None = None
+    fresh_hours: int | None = None  # only posts from the last N hours
 
 
+FRESH_MAX_BIDS = 30
+FRESH_HOURS = 48
 QUICK_VIEWS = {
     "⭐ Best leads": View(("New", "Ticked"), BEST_SCORE),
+    "🔥 Fresh gigs": View(("New", "Ticked"), BEST_SCORE, JOB_BOARD_PLATFORMS, answered=False,
+                         max_bids=FRESH_MAX_BIDS, fresh_hours=FRESH_HOURS),
     "🙋 Non-tech people": View(("New", "Ticked"), tech_levels=("non_technical",)),
     "💼 Jobs": View(("New", "Ticked"), platforms=JOB_BOARD_PLATFORMS),
     "✅ Answered": View(answered=True),
@@ -84,8 +92,15 @@ def render(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry
     view = st.segmented_control("Show", list(QUICK_VIEWS), default="⭐ Best leads", key="quick_view")
     view = view or "⭐ Best leads"
     chosen = QUICK_VIEWS[view]
-    filters = replace(_sidebar_filters(settings.db_path, chosen.statuses, chosen.min_score),
-                      platforms=chosen.platforms, answered=chosen.answered, tech_levels=chosen.tech_levels)
+    filters = replace(
+        _sidebar_filters(settings.db_path, chosen.statuses, chosen.min_score),
+        platforms=chosen.platforms, answered=chosen.answered, tech_levels=chosen.tech_levels,
+        max_bids=chosen.max_bids,
+        posted_since=utc_now() - timedelta(hours=chosen.fresh_hours) if chosen.fresh_hours else None,
+    )
+    if view == "🔥 Fresh gigs":
+        st.caption(f"Good gigs and job posts from the last {FRESH_HOURS} hours with at most {FRESH_MAX_BIDS} bids "
+                   "that you haven't answered: bid on these first, before the crowd arrives.")
     if view == "🙋 Non-tech people":
         st.caption("People with no IT background who probably don't know a tool can solve their problem: "
                    "your best potential customers.")
@@ -192,9 +207,10 @@ def _table(rows: list[dict], key: str) -> dict:
         height=min(40 + 35 * len(table), 460),
         on_select="rerun",
         selection_mode="single-row",
-        column_order=["✅", "Verdict", "Score", "Service", "Who", "Title", "Delivery", "Source", "Status", "Post"],
+        column_order=["✅", "Verdict", "Score", "Service", "Who", "Title", "Bids", "Delivery", "Source", "Status", "Post"],
         column_config={
-            "✅": cc.TextColumn("✅", width=40, help="✅ = you answered this post"),
+            "✅": cc.TextColumn("✅", width=40, help="✅ answered · 💬 they replied · 🏆 won · ❌ lost"),
+            "Bids": cc.NumberColumn("Bids", width=60, help="Freelancer.com: bids when the app found it. Fewer = better chance"),
             "Verdict": cc.TextColumn("Verdict", width=125),
             "Score": cc.ProgressColumn("Score", min_value=0, max_value=100, format="%d", width=85),
             "Service": cc.TextColumn("Service", width=110),
@@ -265,6 +281,15 @@ def _answered_tick(conn: sqlite3.Connection, post: dict, where) -> None:
         st.rerun()
     if answered:
         where.caption(f"Answered on {post['answered_at'][:10]}")
+        outcome = where.segmented_control(
+            "What happened?", list(OUTCOME_LABELS), default=post.get("outcome"),
+            format_func=OUTCOME_LABELS.get, key=f"outcome_{post['id']}_{post.get('outcome')}",
+            help="Set it when they reply, hire you or choose someone else. The 📊 Results page learns from it.",
+        )
+        if outcome != post.get("outcome") and (outcome is not None or post.get("outcome") is not None):
+            store.set_outcome(conn, post["id"], outcome)
+            st.toast(f"Saved: {OUTCOME_LABELS[outcome]}")
+            st.rerun()
 
 
 def _badges(post: dict) -> None:
@@ -348,7 +373,9 @@ def _reply_tab(conn: sqlite3.Connection, settings: Settings, registry: ModelRegi
     compare_drafts(
         conn, kind="reply", owner_id=post["id"], chosen_body=post["reply_draft"], key=f"reply_{post['id']}",
         make_draft=lambda style: draft_reply(conn, build_llm(settings, conn), registry, settings, post["id"], style),
-        choose=lambda draft: store.update_action(conn, post["id"], reply_draft=draft["body"]),
+        choose=lambda draft: store.update_action(conn, post["id"], reply_draft=draft["body"],
+                                                 reply_style=draft.get("style")),
+        styles=styles_for(post["platform"]), preferred=get_style(conn, post["platform"]),
     )
     if not post["reply_draft"]:
         return

@@ -82,16 +82,16 @@ Keep the small black window open while you use the app; close it to stop.
 The dashboard opens at <http://localhost:8501>. It only listens on your own
 computer, not your Wi-Fi network.
 
-## 3. Run it automatically every morning (Windows)
+## 3. Run it automatically every 3 hours (Windows)
 
-Open PowerShell **in the project folder** and paste this once (it runs the job
-daily at 7:00):
+Good Freelancer.com gigs collect 50-300 bids within a day, so the job runs every
+3 hours (from 7:00), in the background with no window. When it finds a good gig
+with at most 20 bids that you haven't answered, Windows shows a notification.
+Top problems are still grouped only once a day. Open PowerShell **in the project
+folder** and run once:
 
 ```powershell
-$dir = (Get-Location).Path
-$action = New-ScheduledTaskAction -Execute "$dir\.venv\Scripts\python.exe" -Argument "run_daily.py" -WorkingDirectory $dir
-$trigger = New-ScheduledTaskTrigger -Daily -At 7am
-Register-ScheduledTask -TaskName "Automation Demand Finder" -Action $action -Trigger $trigger -Description "Daily collect, filter and analyse"
+powershell -ExecutionPolicy Bypass -File scripts\schedule_every_3_hours.ps1
 ```
 
 To check it: open **Task Scheduler** → *Task Scheduler Library* → *Automation
@@ -107,6 +107,10 @@ Logs from every run are in `logs/app.log`.
 | 🎯 **Opportunities** | Pick a view (⭐ Best leads, 🛠️ In progress, 📋 All…), click a post, then use the tabs: **Overview**, **💡 Samjhao** (click the button: Claude explains the job and how to do it in simple Roman Urdu, about Rs 2–3 each, saved after that), **✍️ Reply** (draft with Claude, edit, copy), **📋 Decision report** (after you tick it), **🗂️ Track** (status, path, notes) |
 | 🧩 **Top problems** | See requests that repeat, open one to see its posts, and click **📝 Write product spec** (download it for Claude Code) |
 | 💼 **Jobs** (a view on Opportunities) | Job-board listings rated for a beginner: small gigs, part-time and junior roles rank high, senior full-time roles low |
+| 🔥 **Fresh gigs** (a view on Opportunities) | Good gigs and job posts from the last 48 hours with at most 30 bids that you haven't answered: bid on these first. The **Bids** column shows how many bids a gig had when found; the score goes up for few bids and down for crowded gigs |
+| ✅ → **What happened?** | After you tick "answered", mark ⏳ Waiting / 💬 They replied / 🏆 Won / ❌ Lost (a reply in the inbox sets "replied" by itself). The table shows ✅ 💬 🏆 ❌ |
+| 📊 **Results** | Your reply rate, and which platform, service, writing style, speed of answering and bid count get replies (trustworthy after about 20 answers) |
+| 📝 **Proposal style** | Gigs and job listings get a Freelancer-style proposal (their goal first, a 3-step plan, delivery time, a `[link to my project]` spot, one question) next to the clear & convincing draft |
 | 🙋 **Non-tech people** (a view on Opportunities) | Posts from people with no IT background who don't know a tool could help: your best customers. The **Who** column shows 🙋 Non-tech / 🙂 Some tech / 🧑‍💻 Techie, with the reason in the post's Overview |
 | 💡 **Pain points** | Problems people have that you could turn into an app or automation product. Step 1: collect more evidence with Muse (Reddit, LinkedIn market problems, LinkedIn requests). Step 2: pick **who analyses: 🤖 Claude (one click, about Rs 6–15) or 🪄 Muse (free, slower, or paste its answer)**. Each pain point shows *why it hurts*, what to build, a **🗣️ discussion** (strong reasons to build it, the honest risks and answers, a verdict), how it could earn (**subscription vs AdSense**), a Roman Urdu note and the real posts behind it. The app rates the evidence (Strong/Medium/Thin) by counting real posts and never lets thin evidence or a 60+ hour first version say "Build it" |
 | 🏆 **Portfolio** | Click **🏆 Pick my portfolio projects**: Claude picks 4–6 projects from your real posts (non-tech people first) that build trust and stay useful for years, each with why, skills, tools, hours, how to show it, a Roman Urdu note and the real posts it answers (about Rs 3–6 a click) |

@@ -227,8 +227,11 @@ def test_upgrade_ticks_posts_that_already_have_replies(tmp_path):
             conn.execute(statement)
         conn.execute(f"PRAGMA user_version = {version:d}")
     conn.commit()
-    store.save_post(conn, make_post("facebook_1", platform="facebook"))
-    store.save_post(conn, make_post("facebook_2", platform="facebook"))
+    for pid in ("facebook_1", "facebook_2"):  # the old schema: no bids column yet
+        conn.execute("INSERT INTO posts (id, source, platform, url, title, body, author_handle, posted_at, "
+                     "collected_at) VALUES (?, 'Facebook', 'facebook', 'https://facebook.com/x', 't', 'b', 'a', "
+                     "'2026-11-18T09:30:00Z', '2026-11-18T09:30:00Z')", (pid,))
+    conn.commit()
     store.save_reply(conn, {"reply_key": "k", "post_id": "facebook_1", "platform": "facebook",
                             "url": "https://facebook.com/x", "author": "A", "text": "hi",
                             "email": None, "replied_at": None})

@@ -11,12 +11,12 @@ import streamlit as st
 
 from app import store
 from app.errors import AppError
-from app.writing import STYLE_HELP, STYLE_LABELS, get_style
+from app.writing import REPLY_STYLES, STYLE_HELP, STYLE_LABELS, get_style
 
 log = logging.getLogger(__name__)
 
-# Oldest style on the left, newest on the right (the order of STYLE_LABELS).
-STYLES_IN_ORDER = tuple(STYLE_LABELS)
+# Oldest style on the left, newest on the right.
+STYLES_IN_ORDER = REPLY_STYLES
 
 
 def compare_drafts(
@@ -29,22 +29,24 @@ def compare_drafts(
     choose: Callable[[dict], None],
     key: str,
     with_subject: bool = False,
+    styles: tuple[str, ...] = STYLES_IN_ORDER,
+    preferred: str | None = None,
 ) -> None:
     """All styles next to each other, each with draft / redraft / "use this one"."""
     drafts = store.get_drafts(conn, kind, owner_id)
-    preferred = get_style(conn)
+    preferred = preferred if preferred in styles else get_style(conn)
     if st.button("✨ Draft all styles" if not drafts else "🔄 Redraft all styles",
                  type="secondary" if drafts else "primary", key=f"all_{key}",
-                 help=f"Writes one draft in each of the {len(STYLES_IN_ORDER)} styles (about Rs 1 each). "
-                      f"Your preferred style ({STYLE_LABELS[preferred]}, set on the Settings page) is picked "
-                      "automatically; switch with 'Use this one'."):
+                 help=f"Writes one draft in each of the {len(styles)} styles (about Rs 0.5 each). "
+                      f"{STYLE_LABELS[preferred]} is picked automatically; switch with 'Use this one'. "
+                      "To spend less, draft just one style with its own button."):
         # The preferred style is drafted last, so it ends up as the chosen one.
-        order = sorted(STYLES_IN_ORDER, key=lambda s: s == preferred)
+        order = sorted(styles, key=lambda s: s == preferred)
         if _run(lambda: [make_draft(style) for style in order], "Claude is writing a draft in each style..."):
             st.rerun()
 
-    columns = st.columns(len(STYLES_IN_ORDER))
-    for column, style in zip(columns, STYLES_IN_ORDER):
+    columns = st.columns(len(styles))
+    for column, style in zip(columns, styles):
         with column, st.container(border=True):
             st.markdown(f"**{STYLE_LABELS[style]}**")
             st.caption(STYLE_HELP[style])
@@ -57,7 +59,7 @@ def compare_drafts(
                 if draft["body"] == chosen_body:
                     st.badge("Chosen", icon=":material/check_circle:", color="green")
                 elif st.button("✅ Use this one", key=f"use_{key}_{style}"):
-                    choose(draft)
+                    choose(draft | {"style": style})
                     st.toast(f"Using the {STYLE_LABELS[style]} draft", icon="✅")
                     st.rerun()
             if st.button("🔄 Redraft" if draft else "✨ Draft this style", key=f"one_{key}_{style}"):

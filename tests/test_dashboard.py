@@ -415,6 +415,65 @@ def test_painpoints_page_muse_engine_prepare_and_paste(env):
     assert any("no JSON answer" in e.value for e in at.error)
 
 
+def _seed_gigs(db_path):
+    from app.domain import utc_now
+
+    with db.open_db(db_path) as conn:
+        for pid, bids in (("freelancer_few", 4), ("freelancer_crowd", 150)):
+            post = make_post(pid, platform="freelancer", source="Freelancer.com", posted_at=utc_now())
+            store.save_post(conn, post.__class__(**{**post.__dict__, "bids": bids}))
+            store.save_analysis(conn, make_analysis(pid, opportunity_score=80))
+
+
+def test_fresh_gigs_view_and_outcome(env):
+    _seed_gigs(env)
+    at = login()
+    at.segmented_control(key="quick_view").set_value("🔥 Fresh gigs")
+    at = at.run()
+    assert not at.exception and "1 posts" in all_text(at)          # the crowded gig is left out
+    assert "bid on these first" in all_text(at)
+    _by_label(at.checkbox, "✅ Maine jawab bhej diya").check()
+    at = at.run()
+    at.segmented_control(key="quick_view").set_value("✅ Answered")
+    at = at.run()
+    outcome = next(s for s in at.segmented_control if s.label == "What happened?")
+    outcome.set_value("won")
+    at = at.run()
+    assert not at.exception
+    with db.open_db(env) as conn:
+        assert store.get_post_details(conn, "freelancer_few")["outcome"] == "won"
+
+
+def test_gig_reply_tab_offers_the_proposal_style(env):
+    _seed_gigs(env)
+    at = login()
+    labels = " ".join(m.value for m in at.markdown)
+    assert "📝 Proposal (for gigs)" in labels and "🛠️ Quick tip" not in labels
+
+
+def _results_page_app():
+    from app import db
+    from app.config import load_settings
+    from app.ui import results_page
+
+    settings = load_settings()
+    with db.open_db(settings.db_path) as conn:
+        results_page.render(conn)
+
+
+def test_results_page(env):
+    at = AppTest.from_function(_results_page_app, default_timeout=TIMEOUT).run()
+    assert not at.exception and "No answered posts yet" in all_text(at)
+    _seed_gigs(env)
+    with db.open_db(env) as conn:
+        store.set_outcome(conn, "freelancer_few", "replied")
+        store.set_answered(conn, "freelancer_crowd", True)
+    at = AppTest.from_function(_results_page_app, default_timeout=TIMEOUT).run()
+    assert not at.exception
+    assert metric(at, "Answered").value == "2" and metric(at, "Reply rate").value == "50%"
+    assert "early hints" in all_text(at) and "Bids when you found it" in all_text(at)
+
+
 def test_ai_errors_are_shown_not_crashed(env):
     seed(env)
     at = login()  # no ANTHROPIC_API_KEY in the test environment

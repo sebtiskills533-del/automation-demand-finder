@@ -235,9 +235,29 @@ CREATE TABLE pain_point_plans (
 );
 """
 
+# posts.bids: how many bids a Freelancer.com gig had when it was collected (NULL = not a gig).
+#   Filled for older gigs from their "Job listing · ... · Bids: N" line, and their score adjusted
+#   the same way app/scoring.bid_adjustment does for new ones (few bids up, many bids down).
+# actions.outcome: what happened after the user answered: replied / won / lost (NULL = waiting).
+# actions.reply_style: the writing style of the reply the user chose, to see which style works.
+_SCHEMA_V12 = """
+ALTER TABLE posts ADD COLUMN bids INTEGER;
+UPDATE posts SET bids = CAST(substr(body, instr(body, 'Bids: ') + 6, 8) AS INTEGER)
+    WHERE platform = 'freelancer' AND instr(body, 'Bids: ') > 0;
+UPDATE analyses SET opportunity_score = max(0, min(100, opportunity_score + (
+        SELECT CASE WHEN p.bids <= 10 THEN 5 WHEN p.bids <= 30 THEN 0 WHEN p.bids <= 80 THEN -10 ELSE -20 END
+        FROM posts p WHERE p.id = analyses.post_id)))
+    WHERE buildable = 1 AND post_id IN (SELECT id FROM posts WHERE bids IS NOT NULL);
+ALTER TABLE actions ADD COLUMN outcome TEXT CHECK (outcome IS NULL OR outcome IN ('replied', 'won', 'lost'));
+ALTER TABLE actions ADD COLUMN outcome_at TEXT;
+ALTER TABLE actions ADD COLUMN reply_style TEXT;
+UPDATE actions SET outcome = 'replied', outcome_at = updated_at
+    WHERE outcome IS NULL AND post_id IN (SELECT post_id FROM replies WHERE post_id IS NOT NULL);
+"""
+
 MIGRATIONS: tuple[str, ...] = (
     _SCHEMA_V1, _SCHEMA_V2, _SCHEMA_V3, _SCHEMA_V4, _SCHEMA_V5, _SCHEMA_V6, _SCHEMA_V7, _SCHEMA_V8,
-    _SCHEMA_V9, _SCHEMA_V10, _SCHEMA_V11,
+    _SCHEMA_V9, _SCHEMA_V10, _SCHEMA_V11, _SCHEMA_V12,
 )
 
 

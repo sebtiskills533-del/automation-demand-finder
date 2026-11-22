@@ -109,7 +109,8 @@ def build_user_text(platform: str, source: str, title: str, body: str) -> str:
     )
 
 
-def to_record(post_id: str, platform: str, result: PostAnalysis, model_id: str) -> AnalysisRecord:
+def to_record(post_id: str, platform: str, result: PostAnalysis, model_id: str,
+              bids: int | None = None) -> AnalysisRecord:
     """Combine Claude's verdict with the app's own fixed rules."""
     # Enforce the rules in code too; never rely on the AI alone.
     buildable = result.buildable and not is_too_big(result.difficulty, result.est_hours)
@@ -142,6 +143,7 @@ def to_record(post_id: str, platform: str, result: PostAnalysis, model_id: str) 
             result.difficulty,
             buildable,
             result.wants_to_hire,
+            bids,
         ),
         model=model_id,
     )
@@ -199,7 +201,7 @@ def _analyze_one(llm: ClaudeClient, model: ModelInfo, row: sqlite3.Row) -> Analy
     result = llm.structured_with_retry(
         task=TASK, model=model, system=SYSTEM_PROMPT, user_text=user_text, output_type=PostAnalysis
     ).data
-    return to_record(row["id"], row["platform"], result, model.id)
+    return to_record(row["id"], row["platform"], result, model.id, row["bids"])
 
 
 def reset_small_skipped(conn: sqlite3.Connection) -> int:
