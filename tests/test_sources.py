@@ -279,7 +279,7 @@ def test_load_sources_from_real_config():
 
     sources = load_sources(CONFIG_DIR / "sources.json")
     names = [s.name for s in sources]
-    assert "r/smallbusiness" in names
+    assert not any(n.startswith("r/") for n in names)   # Reddit is switched off (it blocks its feeds)
     assert "Ask HN: automate" in names
     assert "n8n community" in names and "Make community" in names
     assert "Stack Exchange webapps: automate" in names

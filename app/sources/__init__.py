@@ -33,8 +33,9 @@ def load_sources(path: Path) -> list[Source]:
     try:
         reddit = config.get("reddit", {})
         per_feed = _bounded_int(reddit.get("posts_per_feed", 25), "posts_per_feed", 1, 100)
-        for subreddit in reddit.get("subreddits", []):
-            sources.append(RedditSource(subreddit, per_feed))
+        if reddit.get("enabled", True):  # "enabled": false keeps the list but stops asking Reddit
+            for subreddit in reddit.get("subreddits", []):
+                sources.append(RedditSource(subreddit, per_feed))
 
         hn = config.get("hackernews", {})
         lookback = _bounded_int(hn.get("lookback_hours", 168), "lookback_hours", 1, 720)

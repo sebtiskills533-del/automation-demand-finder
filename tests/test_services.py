@@ -81,7 +81,23 @@ def test_new_sources_are_configured():
     assert "Digital Point forums" in names
     assert "Stack Exchange webmasters: seo" in names
     assert "Ask HN: SEO" in names
-    assert "r/localseo" in names and "r/EtsySellers" in names
+    # Reddit blocks its feeds and closed API access: switched off, list kept for later.
+    assert not any(n.startswith("r/") for n in names)
+    config = json.loads((CONFIG_DIR / "sources.json").read_text(encoding="utf-8"))
+    assert config["reddit"]["enabled"] is False and "EtsySellers" in config["reddit"]["subreddits"]
+
+
+def test_reddit_switch(tmp_path):
+    path = tmp_path / "sources.json"
+    other = {"hackernews": {"queries": ["automate"]}}
+
+    def reddit_names(reddit: dict) -> list[str]:
+        path.write_text(json.dumps({"reddit": reddit, **other}), encoding="utf-8")
+        return [s.name for s in load_sources(path) if s.name.startswith("r/")]
+
+    assert reddit_names({"enabled": True, "subreddits": ["excel", "Etsy"]}) == ["r/excel", "r/Etsy"]
+    assert reddit_names({"enabled": False, "subreddits": ["excel", "Etsy"]}) == []
+    assert reddit_names({"subreddits": ["excel"]}) == ["r/excel"]          # no switch = on
 
 
 FORUM_FEED = """<?xml version="1.0" encoding="utf-8"?>

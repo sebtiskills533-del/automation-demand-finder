@@ -104,6 +104,14 @@ Demand Finder* → right-click → **Run**. To remove it:
 
 Logs from every run are in `logs/app.log`.
 
+**Backups:** each day's first run saves a copy of your database to
+`data/backups/finder-YYYY-MM-DD.db` and keeps the last 7 days. To restore one, close the
+dashboard and copy it over `data/finder.db`.
+
+**Reddit:** its feeds are switched off (`"enabled": false` in `config/sources.json`) because
+Reddit blocks them and closed API requests. Reddit posts now come through Muse
+(Import posts → *Where should Muse look?* → Reddit).
+
 ## Using the dashboard
 
 | Page | What you do there |

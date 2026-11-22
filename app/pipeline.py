@@ -17,6 +17,7 @@ from app.cli import Runtime
 from app.clusters import run_clustering
 from app.collect import CollectReport, collect
 from app import store
+from app.backup import daily_backup
 from app.domain import to_iso, utc_now
 from app.errors import AppError
 from app.prefilter import FilterReport, load_phrases, run_prefilter
@@ -36,6 +37,7 @@ class DailyReport:
     analyzed: AnalyzeReport
     grouping: str = ""
     fresh_gigs: tuple[dict, ...] = ()
+    backup: str = ""
 
     def summary_lines(self, usd_to_inr: float) -> list[str]:
         lines = [f"Collected {self.collected.total_new} new posts:"]
@@ -52,6 +54,8 @@ class DailyReport:
             lines.append(f"Stopped early: {a.stopped_reason}")
         if self.grouping:
             lines.append(f"Top problems: {self.grouping}")
+        if self.backup:
+            lines.append(f"Backup: {self.backup}")
         if self.fresh_gigs:
             lines.append(f"Fresh gigs with few bids: {len(self.fresh_gigs)}")
             lines += [f"  {g['title'][:70]} ({g['bids'] if g['bids'] is not None else '?'} bids)"
@@ -67,7 +71,9 @@ def run_daily(runtime: Runtime, now: Callable[[], datetime] = utc_now) -> DailyR
     filtered = run_prefilter(runtime.conn, load_phrases(runtime.settings.phrases_file))
     analyzed = analyze_pending(runtime.conn, runtime.llm, runtime.registry, runtime.settings)
     fresh = tuple(store.fresh_gigs(runtime.conn, started - timedelta(seconds=1), ALERT_MIN_SCORE, ALERT_MAX_BIDS))
-    report = DailyReport(collected, filtered, analyzed, _group(runtime, now()), fresh)
+    grouping = _group(runtime, now())
+    backup = daily_backup(runtime.conn, runtime.settings.db_path.parent / "backups", now().astimezone().date())
+    report = DailyReport(collected, filtered, analyzed, grouping, fresh, backup)
     log.info("Daily run finished: %s", " | ".join(report.summary_lines(runtime.settings.usd_to_inr)))
     return report
 

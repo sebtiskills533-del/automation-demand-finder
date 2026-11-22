@@ -1,5 +1,7 @@
 {
   "reddit": {
+    "_note": "Off since 2026-11-22: Reddit blocks its RSS feeds (HTTP 429) and closed API requests. Reddit now comes through Muse (Import posts -> Where should Muse look? -> Reddit).",
+    "enabled": false,
     "subreddits": [
       "smallbusiness",
       "automation",

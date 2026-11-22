@@ -37,7 +37,7 @@ app/
   privacy.py          strips emails / phone numbers
   html_text.py        HTML -> plain text
   http_client.py      polite HTTP client (rate limit, retries, UA)
-  sources/            Reddit RSS, Hacker News (Ask HN), Stack Exchange, Discourse, rss_forum and
+  sources/            Reddit RSS (switched off: enabled=false), Hacker News (Ask HN), Stack Exchange, Discourse, rss_forum and
                       jobs.py (Freelancer.com, Remote OK, Remotive, Himalayas, WWR, Working Nomads;
                       budgets via money_range so the phone filter never eats them)
   services.py         the user's services (config/services.json): automation, etsy, seo, local_seo
@@ -61,6 +61,7 @@ app/
   clusters.py         v1.1 top problems (numbered lines in, numbers out)
   specs.py            v1.2 product specs per problem group
   inbox.py            replies people sent the user (linking, email-if-shared rule)
+  backup.py           daily DB copy at the end of each run, 7 kept (data/backups/)
   schedule.py         on/off switch + hours for scheduled runs (run_daily.py --scheduled obeys it)
   results.py          📊 Results logic (reply rate by platform/service/style/speed/bids); pure functions
   notify.py           Windows toast for fresh low-bid gigs (text via env vars, never in the command)
