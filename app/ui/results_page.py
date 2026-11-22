@@ -31,7 +31,7 @@ def render(conn: sqlite3.Connection) -> None:
     c4.metric("Reply rate", f"{total['reply_rate']}%")
     waiting = sum(1 for r in rows if r.get("outcome") is None and not results.got_reply(r))
     if waiting:
-        st.caption(f"⏳ {waiting} answers are still 'Waiting'. Update them on Opportunities → ✅ Answered.")
+        st.caption(f"⏳ {waiting} answers are still 'Waiting'. Update them on 🎯 Opportunities or 💼 Freelance jobs → ✅ Answered.")
     if total["answered"] < results.TRUST_AFTER:
         st.info(f"With {total['answered']} answers these are early hints, not proof. Patterns become "
                 f"trustworthy after about {results.TRUST_AFTER} answers.")

@@ -306,6 +306,7 @@ class DashboardFilters:
     search: str = ""
     answered: bool | None = None  # True = only answered, False = only not answered
     tech_levels: tuple[str, ...] = ()
+    exclude_platforms: tuple[str, ...] = ()
     max_bids: int | None = None      # gigs with at most this many bids (posts without bids still show)
     posted_since: datetime | None = None
 
@@ -341,6 +342,11 @@ def _dashboard_where(filters: DashboardFilters) -> tuple[str, list[object]]:
     in_list("p.source", filters.sources, None)
     in_list("a.service", filters.services, None)
     in_list("p.platform", filters.platforms, PLATFORM_NAMES)
+    if filters.exclude_platforms:
+        if not set(filters.exclude_platforms) <= set(PLATFORM_NAMES):
+            raise ValueError("Invalid filter value for p.platform")
+        clauses.append(f"p.platform NOT IN ({', '.join('?' for _ in filters.exclude_platforms)})")
+        params.extend(filters.exclude_platforms)
     in_list("COALESCE(ac.status, 'New')", filters.statuses, STATUSES)
     in_list("a.tech_level", filters.tech_levels, TECH_LEVELS)
     if filters.buildable_only:

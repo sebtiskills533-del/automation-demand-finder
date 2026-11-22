@@ -425,16 +425,25 @@ def _seed_gigs(db_path):
             store.save_analysis(conn, make_analysis(pid, opportunity_score=80))
 
 
+def _jobs_page_app():
+    from app import db
+    from app.config import load_settings
+    from app.models_registry import load_registry
+    from app.ui import opportunities
+
+    settings = load_settings()
+    with db.open_db(settings.db_path) as conn:
+        opportunities.render(conn, settings, load_registry(settings.models_file), opportunities.JOBS)
+
+
 def test_fresh_gigs_view_and_outcome(env):
     _seed_gigs(env)
-    at = login()
-    at.segmented_control(key="quick_view").set_value("🔥 Fresh gigs")
-    at = at.run()
-    assert not at.exception and "1 posts" in all_text(at)          # the crowded gig is left out
+    at = AppTest.from_function(_jobs_page_app, default_timeout=TIMEOUT).run()
+    assert not at.exception and "1 posts" in all_text(at)          # Fresh gigs is the first view; crowded gig out
     assert "bid on these first" in all_text(at)
     _by_label(at.checkbox, "✅ Maine jawab bhej diya").check()
     at = at.run()
-    at.segmented_control(key="quick_view").set_value("✅ Answered")
+    at.segmented_control(key="jobs_view").set_value("✅ Answered")
     at = at.run()
     outcome = next(s for s in at.segmented_control if s.label == "What happened?")
     outcome.set_value("won")
@@ -446,7 +455,7 @@ def test_fresh_gigs_view_and_outcome(env):
 
 def test_gig_reply_tab_offers_the_proposal_style(env):
     _seed_gigs(env)
-    at = login()
+    at = AppTest.from_function(_jobs_page_app, default_timeout=TIMEOUT).run()
     labels = " ".join(m.value for m in at.markdown)
     assert "📝 Proposal (for gigs)" in labels and "🛠️ Quick tip" not in labels
 
@@ -758,18 +767,32 @@ def test_platforms_page_shows_groups_and_search(env):
     assert len(at.expander) == 1 and len(at.dataframe) == 1
 
 
-def test_jobs_quick_view(env):
-    from app.importer import import_rows
-
+def test_freelance_jobs_and_public_posts_are_on_separate_pages(env):
     with db.open_db(env) as conn:
         store.save_post(conn, make_post("freelancer_9", platform="freelancer", source="Freelancer.com",
                                         title="GBP setup gig"))
-        store.save_analysis(conn, make_analysis("freelancer_9", opportunity_score=40))
-        import_rows(conn, [{"url": "https://www.quora.com/q1", "title": "Not a job board"}])
-    at = login()
-    at.segmented_control(key="quick_view").set_value("💼 Jobs").run()
-    assert not at.exception
-    assert "1 posts" in all_text(at) and "GBP setup gig" in all_text(at)
+        store.save_analysis(conn, make_analysis("freelancer_9", opportunity_score=80))
+        store.save_post(conn, make_post("reddit_9", title="Forum question about sheets"))
+        store.save_analysis(conn, make_analysis("reddit_9", opportunity_score=80))
+
+    jobs = AppTest.from_function(_jobs_page_app, default_timeout=TIMEOUT).run()
+    jobs.segmented_control(key="jobs_view").set_value("📋 All")
+    jobs = jobs.run()
+    assert not jobs.exception and "💼 Freelance jobs" in all_text(jobs)
+    assert "1 posts" in all_text(jobs) and "GBP setup gig" in all_text(jobs)
+    assert "Forum question" not in all_text(jobs)
+
+    public = login()                                                  # 🎯 Opportunities is the home page
+    public.segmented_control(key="quick_view").set_value("📋 All")
+    public = public.run()
+    assert not public.exception and "1 posts" in all_text(public)
+    assert "Forum question about sheets" in all_text(public) and "GBP setup gig" not in all_text(public)
+    assert "💼 Jobs" not in [o for s in public.segmented_control for o in s.options]
+
+
+def test_public_page_rejects_unknown_platform_filters(conn):
+    with pytest.raises(ValueError):
+        store.get_dashboard_rows(conn, store.DashboardFilters(exclude_platforms=("myspace",)))
 
 
 # ---------------------------------------------------------------- replies

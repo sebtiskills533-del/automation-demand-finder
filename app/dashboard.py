@@ -88,6 +88,8 @@ def main() -> None:
         pages = [
             st.Page(lambda: opportunities.render(conn, settings, registry),
                     title="Opportunities", icon="🎯", url_path="opportunities", default=True),
+            st.Page(lambda: opportunities.render(conn, settings, registry, opportunities.JOBS),
+                    title="Freelance jobs", icon="💼", url_path="jobs"),
             st.Page(lambda: replies_page.render(conn, settings, registry),
                     title=f"Replies ({new_replies} new)" if new_replies else "Replies",
                     icon="🔔", url_path="replies"),

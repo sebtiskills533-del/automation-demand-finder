@@ -60,4 +60,4 @@ def fresh_gigs_message(gigs: list[dict]) -> tuple[str, str]:
     parts = [f"{' '.join(g['title'].split())[:60]} ({g['bids']} bids)" if g.get("bids") is not None
              else " ".join(g["title"].split())[:60] for g in gigs[:3]]
     more = f" +{len(gigs) - 3} more" if len(gigs) > 3 else ""
-    return title, " · ".join(parts) + more + ". Open Opportunities → 🔥 Fresh gigs."
+    return title, " · ".join(parts) + more + ". Open 💼 Freelance jobs → 🔥 Fresh gigs."

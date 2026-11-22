@@ -108,10 +108,10 @@ Logs from every run are in `logs/app.log`.
 
 | Page | What you do there |
 | --- | --- |
-| 🎯 **Opportunities** | Pick a view (⭐ Best leads, 🛠️ In progress, 📋 All…), click a post, then use the tabs: **Overview**, **💡 Samjhao** (click the button: Claude explains the job and how to do it in simple Roman Urdu, about Rs 2–3 each, saved after that), **✍️ Reply** (draft with Claude, edit, copy), **📋 Decision report** (after you tick it), **🗂️ Track** (status, path, notes) |
+| 🎯 **Opportunities** | Posts from public forums, Q&A sites and social media (not freelance marketplaces). Pick a view (⭐ Best leads, 🛠️ In progress, 📋 All…), click a post, then use the tabs: **Overview**, **💡 Samjhao** (click the button: Claude explains the job and how to do it in simple Roman Urdu, about Rs 2–3 each, saved after that), **✍️ Reply** (draft with Claude, edit, copy), **📋 Decision report** (after you tick it), **🗂️ Track** (status, path, notes) |
 | 🧩 **Top problems** | See requests that repeat, open one to see its posts, and click **📝 Write product spec** (download it for Claude Code) |
-| 💼 **Jobs** (a view on Opportunities) | Job-board listings rated for a beginner: small gigs, part-time and junior roles rank high, senior full-time roles low |
-| 🔥 **Fresh gigs** (a view on Opportunities) | Good gigs and job posts from the last 48 hours with at most 30 bids that you haven't answered: bid on these first. The **Bids** column shows how many bids a gig had when found; the score goes up for few bids and down for crowded gigs |
+| 💼 **Freelance jobs** (its own page) | Only freelance marketplaces and job boards (Freelancer.com, Remote OK, Remotive, Himalayas, We Work Remotely, Working Nomads), rated for a beginner: small gigs, part-time and junior roles rank high, senior full-time roles low. Views: 🔥 Fresh gigs, ⭐ Best gigs, 🙋 Non-tech clients, ✅ Answered and more; same detail tabs, with proposal drafts |
+| 🔥 **Fresh gigs** (first view on Freelance jobs) | Good gigs and job posts from the last 48 hours with at most 30 bids that you haven't answered: bid on these first. The **Bids** column shows how many bids a gig had when found; the score goes up for few bids and down for crowded gigs |
 | ✅ → **What happened?** | After you tick "answered", mark ⏳ Waiting / 💬 They replied / 🏆 Won / ❌ Lost (a reply in the inbox sets "replied" by itself). The table shows ✅ 💬 🏆 ❌ |
 | 📊 **Results** | Your reply rate, and which platform, service, writing style, speed of answering and bid count get replies (trustworthy after about 20 answers) |
 | 📝 **Proposal style** | Gigs and job listings get a Freelancer-style proposal (their goal first, a 3-step plan, delivery time, a `[link to my project]` spot, one question) next to the clear & convincing draft |

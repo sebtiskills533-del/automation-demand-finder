@@ -51,7 +51,7 @@ def render(conn: sqlite3.Connection) -> None:
     c1, c2, c3 = st.columns(3)
     c1.metric("Platforms in your list", total)
     c2.metric("Connected automatically", len(next((g["platforms"] for g in groups if g["id"] == "connected"), [])))
-    c3.metric("Rated jobs from job boards", jobs, help="See them on Opportunities → 💼 Jobs")
+    c3.metric("Rated jobs from job boards", jobs, help="See them on the 💼 Freelance jobs page")
 
     search = st.text_input("Find a platform", max_chars=60, placeholder="e.g. Fiverr").strip().lower()
     for group in groups:

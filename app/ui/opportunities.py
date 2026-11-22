@@ -71,40 +71,63 @@ class View(NamedTuple):
 
 FRESH_MAX_BIDS = 30
 FRESH_HOURS = 48
-QUICK_VIEWS = {
+
+# Two pages share this code: public posts (forums, Q&A sites, social media) on 🎯 Opportunities, and
+# freelance marketplaces / job boards on 💼 Freelance jobs. A post shows on exactly one of them.
+PUBLIC, JOBS = "public", "jobs"
+QUICK_VIEWS = {  # 🎯 Opportunities: everything except freelance marketplaces and job boards
     "⭐ Best leads": View(("New", "Ticked"), BEST_SCORE),
-    "🔥 Fresh gigs": View(("New", "Ticked"), BEST_SCORE, JOB_BOARD_PLATFORMS, answered=False,
-                         max_bids=FRESH_MAX_BIDS, fresh_hours=FRESH_HOURS),
     "🙋 Non-tech people": View(("New", "Ticked"), tech_levels=("non_technical",)),
-    "💼 Jobs": View(("New", "Ticked"), platforms=JOB_BOARD_PLATFORMS),
     "✅ Answered": View(answered=True),
     "🛠️ In progress": View(("Ticked", "Building")),
     "📋 All": View(),
     "💰 Done & sold": View(("Done", "Sold")),
     "🚫 Skipped": View(("Skipped",)),
 }
+JOB_VIEWS = {  # 💼 Freelance jobs: only freelance marketplaces and job boards
+    "🔥 Fresh gigs": View(("New", "Ticked"), BEST_SCORE, answered=False,
+                         max_bids=FRESH_MAX_BIDS, fresh_hours=FRESH_HOURS),
+    "⭐ Best gigs": View(("New", "Ticked"), BEST_SCORE),
+    "🙋 Non-tech clients": View(("New", "Ticked"), tech_levels=("non_technical",)),
+    "✅ Answered": View(answered=True),
+    "🛠️ In progress": View(("Ticked", "Building")),
+    "📋 All": View(),
+    "💰 Won & done": View(("Done", "Sold")),
+    "🚫 Skipped": View(("Skipped",)),
+}
+_SCOPES = {
+    PUBLIC: ("🎯 Opportunities", "People asking for help on public forums, Q&A sites and social media. "
+             "Click a row to read it, draft a reply and track it.", QUICK_VIEWS, "quick_view"),
+    JOBS: ("💼 Freelance jobs", "Gigs and job posts from freelance marketplaces and job boards "
+           "(Freelancer.com, Remote OK, Remotive, Himalayas, We Work Remotely, Working Nomads). "
+           "Click a row to read it and draft a proposal.", JOB_VIEWS, "jobs_view"),
+}
 
 
-def render(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry) -> None:
-    page_header("🎯 Opportunities", "Best posts first. Click a row to read it, draft a reply and track it.")
-    _summary(conn, settings)
+def render(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry, scope: str = PUBLIC) -> None:
+    title, subtitle, views, view_key = _SCOPES[scope]
+    page_header(title, subtitle)
+    if scope == PUBLIC:
+        _summary(conn, settings)
 
-    view = st.segmented_control("Show", list(QUICK_VIEWS), default="⭐ Best leads", key="quick_view")
-    view = view or "⭐ Best leads"
-    chosen = QUICK_VIEWS[view]
+    first = next(iter(views))
+    view = st.segmented_control("Show", list(views), default=first, key=view_key) or first
+    chosen = views[view]
     filters = replace(
         _sidebar_filters(settings.db_path, chosen.statuses, chosen.min_score),
-        platforms=chosen.platforms, answered=chosen.answered, tech_levels=chosen.tech_levels,
-        max_bids=chosen.max_bids,
+        platforms=JOB_BOARD_PLATFORMS if scope == JOBS else (),
+        exclude_platforms=JOB_BOARD_PLATFORMS if scope == PUBLIC else (),
+        answered=chosen.answered, tech_levels=chosen.tech_levels, max_bids=chosen.max_bids,
         posted_since=utc_now() - timedelta(hours=chosen.fresh_hours) if chosen.fresh_hours else None,
     )
     if view == "🔥 Fresh gigs":
         st.caption(f"Good gigs and job posts from the last {FRESH_HOURS} hours with at most {FRESH_MAX_BIDS} bids "
                    "that you haven't answered: bid on these first, before the crowd arrives.")
-    if view == "🙋 Non-tech people":
+    if chosen.tech_levels:
         st.caption("People with no IT background who probably don't know a tool can solve their problem: "
                    "your best potential customers.")
-    _tech_backfill(conn, settings, registry)
+    if scope == PUBLIC:
+        _tech_backfill(conn, settings, registry)
 
     total = store.count_dashboard_rows(conn, filters)
     if total == 0:
@@ -118,11 +141,11 @@ def render(conn: sqlite3.Connection, settings: Settings, registry: ModelRegistry
     pages = math.ceil(total / PAGE_SIZE)
     page = 1
     if pages > 1:
-        page = st.number_input(f"Page (1-{pages})", 1, pages, 1, key="page")
+        page = st.number_input(f"Page (1-{pages})", 1, pages, 1, key=f"page_{scope}")
     rows = store.get_dashboard_rows(conn, filters, PAGE_SIZE, (page - 1) * PAGE_SIZE)
     st.caption(f"{total} posts · page {page} of {pages}")
 
-    selected = _table(rows, key=f"table_{hash((view, filters, page))}")
+    selected = _table(rows, key=f"table_{scope}_{hash((view, filters, page))}")
     st.write("")
     _details(conn, settings, registry, selected["id"])
 

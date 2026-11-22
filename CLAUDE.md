@@ -73,7 +73,7 @@ app/
   auth.py             password hashing + login lockout
   set_password.py     CLI to set the dashboard password
   dashboard.py        Streamlit entry point
-  ui/                 dashboard pages (opportunities, replies_page, problems_page,
+  ui/                 dashboard pages (opportunities: 🎯 public posts + 💼 Freelance jobs, scope PUBLIC/JOBS; replies_page, problems_page,
                       import_page, painpoints_page, platforms_page, portfolio_page, results_page, settings_page), reply_widgets.py, background.py, components.py (badges, md_escape), assets/
                       Theme: .streamlit/config.toml (teal + amber).
 config/               sources.json, phrases.txt, models.json, services.json, platforms.json (user-editable)
